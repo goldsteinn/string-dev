@@ -112,6 +112,9 @@
 /******************************************************************************/
 /* Do macro on all args in __VA_ARGS__.  */
 #define APPLY(macro, OP, ...) CAT_BASE(APPLY, IS_EMPTY(__VA_ARGS__))(macro, FWD_TOKEN(OP), __VA_ARGS__)
+
+#define APPLY2(macro, OP, ...) CAT_BASE(APPLY_, PP_NARG(__VA_ARGS__))(macro, OP, __VA_ARGS__)
+
 #define APPLY1(macro, OP, ...)
 #define APPLY0(macro, OP, ...) CAT_BASE(APPLY_, PP_NARG(__VA_ARGS__))(macro, OP, __VA_ARGS__)
 
@@ -320,9 +323,9 @@
 
 
 /* Do macro on all args in __VA_ARGS__.  */
-#define APPLY_PACKL(argp, ...) CAT_BASE(APPLY_PACKL, IS_EMPTY(__VA_ARGS__))(argp, __VA_ARGS__))
+#define APPLY_PACKL(argp, ...) CAT_BASE(APPLY_PACKL, IS_EMPTY(__VA_ARGS__))(argp, __VA_ARGS__)
 #define APPLY_PACKL1(argp, ...)
-#define APPLY_PACKL0(argp, ...)CAT_BASE(APPLY_PACKL_, PP_NARG(__VA_ARGS__))(argp, __VA_ARGS__)
+#define APPLY_PACKL0(argp, ...) CAT_BASE(APPLY_PACKL_, PP_NARG(__VA_ARGS__))(argp, __VA_ARGS__)
 
 #define APPLY_PACKL_1(argp, x1) (x1, argp)
 #define APPLY_PACKL_2(argp, x1, x2) (x1, argp) , (x2, argp)
@@ -470,6 +473,7 @@
 #define REMAKE_COMMA_ONE(...)  __VA_ARGS__
 #define REMAKE_COMMA_MANY(...) COMMA
 
+
 #define DEPAREN_NOTHING_DEPAREN_EXTRACT
 #define DEPAREN_PASTE(x, ...)            x##__VA_ARGS__
 #define DEPAREN_EVALUATING_PASTE(x, ...) DEPAREN_PASTE(x, __VA_ARGS__)
@@ -483,6 +487,6 @@
     CAT_BASE(I__ADD_ARG, IS_EMPTY(__VA_ARGS__))(x, __VA_ARGS__)
 
 #define FORWARD(...) __VA_ARGS__
-
+#define EAT(...)
 
 #endif

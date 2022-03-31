@@ -1,5 +1,9 @@
 #include "util/time-util.h"
 
+double
+time_per_trial(uint64_t time, uint64_t trials) {
+    return CAST(double, time) / CAST(double, trials);
+}
 
 void
 print_res(char const * desc,

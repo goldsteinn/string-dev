@@ -102,6 +102,7 @@ vdso_get_ns() {
     return to_ns(&ts);
 }
 
+double time_per_trial(uint64_t time, uint64_t trials);
 
 void print_res(char const * desc,
                uint64_t     time,

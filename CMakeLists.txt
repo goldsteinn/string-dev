@@ -41,7 +41,7 @@ foreach(attr ${attrs})
 endforeach()
 
 
-add_compile_options(-D_GNU_SOURCE -O2 -Wwrite-strings -Wcast-qual -Wclobbered -Wdangling-else -Woverlength-strings -Wdisabled-optimization -Wstrict-aliasing -Wstrict-overflow  -Wall -Wextra -Wno-unused-function -Wno-variadic-macros -march=native -mtune=native -std=${STD} ${LANG_FLAGS})
+add_compile_options(-D_GNU_SOURCE -O2 -Wwrite-strings -Wcast-qual -Wclobbered -Wdangling-else -Woverlength-strings -Wdisabled-optimization -Wstrict-aliasing -Wstrict-overflow  -Werror -Wall -Wextra -Wno-unused-function -Wno-variadic-macros -march=native -mtune=native -std=${STD} ${LANG_FLAGS})
 
 set(link_libraries  "")
 list(APPEND link_libraries "-ldl")

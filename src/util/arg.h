@@ -3,7 +3,7 @@
 
 /* simple argument parsing with documentation
 
- options can be typed as int, char, char*, bool, double, or handled by a
+ options can be typed as int, char, char*, bool, float, or handled by a
  special function positional parameters are always string and must be listed
  in order a special type Rest means all rest are returned as a pointer.  */
 
@@ -19,7 +19,7 @@ typedef enum {
     Character = 2,
     String    = 3,
     Boolean   = 4,
-    Double    = 5,
+    Float     = 5,
     Rest      = 6,
     Help,
     Increment,
@@ -50,23 +50,33 @@ typedef struct arg_rest {
 #define INIT_ARG_REST_T                                                        \
     { NULL, 0 }
 
-typedef struct _argoption ArgOption;
-struct _argoption {
-    ArgKind      kind;    /* option, positionl, rest, end, help */
-    ArgType      type;    /* type of the argument/option */
-    const char * longarg; /* also name of positional arg for doc purposes */
-    int32_t      required;
-    void *       dest;
-    const char * desc;
+typedef struct argoption_ ArgOption;
+struct argoption_ {
+    ArgKind            kind;          /* option, positionl, rest, end, help */
+    ArgType            type;          /* type of the argument/option */
+    char const * const args_begin[4]; /* also name of positional arg */
+    int32_t            required;
+    void *             dest;
+    uint64_t           dest_sz;     /* hidden to used. */
+    int32_t            is_unsigned; /* hidden to used. */
+    char const *       desc;
 };
 
-typedef struct _argdef ArgDefs;
 
-struct _argdef {
+#define ADD_ARG(kind, type, names, reqd, var, help)                            \
+    {                                                                          \
+        kind, type, { DEPAREN(names) }, reqd, var, sizeof(*var),               \
+            is_same_type(var, UNSIGNED_PTR(var)), help                         \
+    }
+
+
+typedef struct argdef_ ArgDefs;
+
+struct argdef_ {
     /* public members.  */
     ArgOption *  args;
-    const char * progdoc;
-    const char * version;
+    char const * progdoc;
+    char const * version;
     void (*doneParsing)(void);
 };
 

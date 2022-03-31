@@ -39,13 +39,15 @@ static const bool true  = !false;
 
 #define CAST_TO_FUNC(func, x) ((FUNC_T(func))(x))
 #define FUNC_T(func)          __typeof__(&(func))
+
 #define CAST(x, y)            ((x)(y))
 #define AGU(base, offset)     (CAST(ptr_int_t, base) + CAST(ptr_int_t, offset))
 #define AGU_T(base, offset)   CAST(get_type(base), AGU(base, offset))
 
 #ifdef __cplusplus
 #include <type_traits>
-#define UNSIGNED(x) std::make_unsigned<get_type(x)>::type
+#define UNSIGNED(x)     std::make_unsigned<get_type(x)>::type
+#define UNSIGNED_PTR(x) UNSIGNED(x)
 #else
 #define UNSIGNED(x)                                                            \
     _Generic((x), char                                                         \
@@ -56,7 +58,18 @@ static const bool true  = !false;
              : (unsigned long)(x), long long                                   \
              : (unsigned long long)(x), default                                \
              : x)
+
+#define UNSIGNED_PTR(x)                                                        \
+    _Generic((x), char *                            \
+             : (unsigned char *)(x), signed char *  \
+             : (unsigned char *)(x), int*           \
+             : (unsigned int*)(x), short *          \
+             : (unsigned short*)(x), long  *        \
+             : (unsigned long*)(x), long long*      \
+             : (unsigned long long*)(x), default    \
+             : x)
 #endif
+
 
 #define get_type(x) __typeof__(x)
 #define is_same_type(x, y)                                                     \
