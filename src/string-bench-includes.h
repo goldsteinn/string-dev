@@ -3,10 +3,18 @@
 
 #include "string-bench-common.h"
 
+
 #define empty_make_bench(func)                                                 \
-    static void const * const bench_name(func) = NULL;
+    static void * bench_name(func)(void * arg) {                               \
+        (void)(arg);                                                           \
+        fprintf(stderr, "No benchmark!\n");                                    \
+        return NULL;                                                           \
+    }
 
 
-#include "strchr-bench.h"
+#define wmemcmp_make_bench empty_make_bench
 
+#include "bench-memcmp.h"
+#include "bench-memcpy.h"
+#include "bench-strchr.h"
 #endif

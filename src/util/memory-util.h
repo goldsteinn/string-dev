@@ -23,6 +23,7 @@
 #define safe_mmap_alloc(sz)                                                    \
     safe_mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,   \
               -1, 0)
+
 #define safe_munmap(addr, sz) I_safe_munmap(addr, sz, ERR_ARGS)
 #define safe_mprotect(addr, sz, prot_flags)                                    \
     I_safe_mprotect(addr, sz, prot_flags, ERR_ARGS)

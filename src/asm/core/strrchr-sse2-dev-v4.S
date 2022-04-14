@@ -92,7 +92,7 @@ L(first_vec_x1):
 #ifdef USE_AS_WCSRCHR
 	leaq	(VEC_SIZE -(CHAR_SIZE - 1))(%rdi, %rax), %rax
 #else
-	addq	%rdi, %rax
+	leaq	(VEC_SIZE)(%rdi, %rax), %rax
 #endif
 	ret
 
@@ -115,6 +115,8 @@ L(aligned_more):
 	testl	%ecx, %ecx
 	jnz	L(first_vec_x2)
 #endif
+
+	movq	%rdi, %rsi
 	.p2align 4
 L(first_loop):
 	movaps	(VEC_SIZE * 2)(%rdi), %xmm4
@@ -122,6 +124,7 @@ L(first_loop):
 	movaps	%xmm5, %xmm6
 	pminub	%xmm4, %xmm5
 
+	movaps	%xmm4, %xmm9
 	PCMPEQ	%xmm0, %xmm4
 	PCMPEQ	%xmm0, %xmm6
 	movaps	%xmm6, %xmm7
@@ -155,22 +158,20 @@ L(first_loop_old_match):
 
 	bsrl	%eax, %eax
 #ifdef USE_AS_WCSRCHR
-	leaq	(VEC_SIZE -(CHAR_SIZE - 1))(%rsi, %rax), %rax
+	leaq	(VEC_SIZE * 1 -(CHAR_SIZE - 1))(%rsi, %rax), %rax
 #else
-	addq	%r8, %rax
+	leaq	(VEC_SIZE * 1)(%rsi, %rax), %rax
 #endif
 	ret
 
 	.p2align 4
 L(new_match):
 	pxor	%xmm6, %xmm6
-	PCMPEQ	%xmm4, %xmm6
+	PCMPEQ	%xmm9, %xmm6
 	pmovmskb %xmm6, %eax
 	sall	$16, %ecx
 	orl	%eax, %ecx
 
-	PCMPEQ	%xmm0, %xmm4
-	PCMPEQ	%xmm0, %xmm7
 
 	pmovmskb %xmm4, %eax
 	pmovmskb %xmm7, %edx
@@ -202,6 +203,7 @@ L(second_loop):
 	movaps	%xmm5, %xmm6
 	pminub	%xmm4, %xmm5
 
+	movaps	%xmm4, %xmm9
 	PCMPEQ	%xmm0, %xmm4
 	PCMPEQ	%xmm0, %xmm6
 	movaps	%xmm6, %xmm7
@@ -217,10 +219,10 @@ L(second_loop):
 	addl	%ecx, %eax
 	jz	L(second_loop)
 
-	subl	%ecx, %eax
-	jnz	L(second_loop_match)
+	testl	%ecx, %ecx
+	jz	L(second_loop_match)
 
-	testl	%eax, %eax
+	subl	%ecx, %eax
 	jnz	L(second_loop_new_match)
 
 L(second_loop_old_match):
@@ -239,13 +241,10 @@ L(second_loop_old_match):
 	.p2align 4
 L(second_loop_new_match):
 	pxor	%xmm6, %xmm6
-	PCMPEQ	%xmm4, %xmm6
+	PCMPEQ	%xmm9, %xmm6
 	pmovmskb %xmm6, %eax
 	sall	$16, %ecx
 	orl	%eax, %ecx
-
-	PCMPEQ	%xmm0, %xmm4
-	PCMPEQ	%xmm0, %xmm7
 
 	pmovmskb %xmm4, %eax
 	pmovmskb %xmm7, %edx

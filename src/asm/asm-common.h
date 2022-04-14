@@ -1,8 +1,8 @@
 #ifndef _SRC__ASM__ASM_COMMON_H_
 #define _SRC__ASM__ASM_COMMON_H_
 
-
-#define L(name)          L##name
+#define _L(name)          L##name
+#define L(name)          _L(name)
 #define NAME_LABEL(name) name##:
 
 #define ENTRY_DEF(name)                                                        \

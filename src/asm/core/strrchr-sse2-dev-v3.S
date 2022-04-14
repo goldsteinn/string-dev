@@ -90,7 +90,7 @@ L(first_vec_x1):
 #ifdef USE_AS_WCSRCHR
 	leaq	(VEC_SIZE -(CHAR_SIZE - 1))(%rdi, %rax), %rax
 #else
-	addq	%rdi, %rax
+	leaq	(VEC_SIZE)(%rdi, %rax), %rax
 #endif
 	ret
 
@@ -136,9 +136,9 @@ L(old_match):
 	jz	L(first_vec_x0_test)
 	bsrl	%edx, %edx
 #ifdef USE_AS_WCSRCHR
-	leaq	(VEC_SIZE -(CHAR_SIZE - 1))(%rsi, %rdx), %rax
+	leaq	(VEC_SIZE * 1 -(CHAR_SIZE - 1))(%rsi, %rdx), %rax
 #else
-	leaq	(%rsi, %rdx), %rax
+	leaq	(VEC_SIZE * 1)(%rsi, %rdx), %rax
 #endif
 	ret
 
@@ -150,9 +150,9 @@ L(new_match):
 	jz	L(old_match)
 	bsrl	%eax, %eax
 #ifdef USE_AS_WCSRCHR
-	leaq	(VEC_SIZE -(CHAR_SIZE - 1))(%rdi, %rax), %rax
+	leaq	(VEC_SIZE * 2-(CHAR_SIZE - 1))(%rdi, %rax), %rax
 #else
-	addq	%rdi, %rax
+	leaq	(VEC_SIZE * 2)(%rsi, %rax), %rax
 #endif
 	ret
 

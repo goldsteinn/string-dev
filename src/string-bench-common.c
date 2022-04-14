@@ -20,7 +20,7 @@ check_free(uint8_t * p, uint32_t sz) {
 
 static uint32_t
 get_alloc_sz(int32_t _sz0, int32_t _align0, int32_t _sz1, int32_t _align1) {
-    return CMAX(_sz0 + _align0, _sz1 + _align1) * 4;
+    return CMAX(_sz0 + _align0, _sz1 + _align1) * 4 + 1048576;
 }
 
 void
@@ -64,4 +64,6 @@ bench_free_common(bench_info_t const * bench_info) {
     check_free(bench_info->s1_base,
                get_alloc_sz(bench_info->sz0, bench_info->align0,
                             bench_info->sz1, bench_info->align1));
+
+    check_free(bench_info->extra, bench_info->extra_sz);
 }

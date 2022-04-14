@@ -39,8 +39,8 @@ set_priors(uint8_t *      buf,
         al_offset, j, k, inc
 #define INIT_I   0
 #define INIT_J   0
-#define INIT_K   32
-#define INIT_INC 128
+#define INIT_K   0
+#define INIT_INC 12
 static int
 test_strrchr_kernel(void const *   test_f,
                     const uint32_t wsize,
@@ -109,7 +109,7 @@ test_strrchr_kernel(void const *   test_f,
     return 0;
 }
 
-int
+static int
 test_strrchr_driver(void const * test_f, const uint32_t wsize) {
     for (uint32_t i = PAGE_SIZE; i <= 2 * PAGE_SIZE; i += 2048 + 4) {
         if (i == PAGE_SIZE) {

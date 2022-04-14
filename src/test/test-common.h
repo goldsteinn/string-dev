@@ -3,8 +3,8 @@
 
 #include "util/attrs.h"
 #include "util/common.h"
-#include "util/memory-util.h"
 #include "util/macro.h"
+#include "util/memory-util.h"
 #include "util/random.h"
 #include "util/types.h"
 
@@ -52,13 +52,14 @@ static NONNULL(1) int32_t is_seq(uint8_t const * buf, uint64_t sz) {
     return 1;
 }
 
-
+#define PRINTLN fprintf(stderr, "%-20s:%-4u\n", __FILENAME__, __LINE__)
 #define test_assert(...)                                                       \
     CAT(test_assert_, NOT_ONE_NARG(__VA_ARGS__))(__VA_ARGS__)
 #define _test_assert(X, todo)                                                  \
     if (UNLIKELY(!(X))) {                                                      \
         fprintf(stderr, "\n\t%-20s:%-4u", __FILENAME__, __LINE__);             \
         todo;                                                                  \
+        abort();                                                               \
         return -1;                                                             \
     }
 

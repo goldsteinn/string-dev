@@ -37,6 +37,8 @@
 
 #define ENDBR4_NOPS NOP4
 
+#define _CET_NOTRACK notrack
+
 #include "asm-common.h"
 
 #endif

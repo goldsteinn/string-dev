@@ -14,7 +14,7 @@ static uint32_t const align_max   = alignments[nalignments - 1];
 static uint32_t
 next_v(uint32_t cur_val, uint32_t test_size) {
     uint32_t ub        = cur_val & 4096;
-    uint32_t al_bound0 = (test_size & 4096) ? 36 : 164;
+    uint32_t al_bound0 = 164;
     uint32_t al_bound1 = (test_size & 4096) ? 132 : align_max;
     cur_val &= 4095;
     if (cur_val <= al_bound0) {
@@ -52,5 +52,39 @@ done:
     return cur_val + ub;
 }
 
+
+#define NPAIRS    9
+#define S1_IDX(x) ((x) << 1)
+#define S2_IDX(x) (((x) << 1) + 1)
+
+static void
+make_alignment_pairs(uint64_t * pairs, uint32_t alignment) {
+    pairs[S1_IDX(0)] = 0;
+    pairs[S2_IDX(0)] = alignment;
+
+    pairs[S1_IDX(1)] = alignment;
+    pairs[S2_IDX(1)] = 0;
+
+    pairs[S1_IDX(2)] = alignment;
+    pairs[S2_IDX(2)] = alignment;
+
+    pairs[S1_IDX(3)] = !!alignment;
+    pairs[S2_IDX(3)] = alignment;
+
+    pairs[S1_IDX(4)] = alignment;
+    pairs[S2_IDX(4)] = !!alignment;
+
+    pairs[S1_IDX(5)] = (alignment * 3) / 5;
+    pairs[S2_IDX(5)] = alignment / 3;
+
+    pairs[S1_IDX(6)] = alignment / 3;
+    pairs[S2_IDX(6)] = (alignment * 3) / 5;
+
+    pairs[S1_IDX(7)] = alignment - (!!alignment);
+    pairs[S2_IDX(7)] = alignment;
+
+    pairs[S1_IDX(8)] = alignment;
+    pairs[S2_IDX(8)] = alignment - (!!alignment);
+}
 
 #endif

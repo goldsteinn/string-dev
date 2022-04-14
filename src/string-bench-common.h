@@ -4,13 +4,9 @@
 #include "util/error-util.h"
 #include "util/types.h"
 
-#define bench_tput(to_run) compiler_do_not_optimize_out(to_run)
-#define bench_lat(to_run)                                                      \
-    compiler_do_not_optimize_out(to_run);                                      \
-    serialize_ooe();
-#define bench_name(func) CAT(bench_, func)
+#include "bench-memcpy-init.h"
 
-typedef enum bench_todo { TPUT, LAT } bench_todo_e;
+#include "string-bench-conf.h"
 
 typedef struct bench_info {
     uint8_t * s0_base;
@@ -31,11 +27,15 @@ typedef struct bench_info {
     uint32_t trials;
 
     bench_todo_e todo;
+
+
+    void *   extra;
+    uint32_t extra_sz;
 } bench_info_t;
 
 static bench_todo_e
-bench_make_todo(uint32_t bench_lat) {
-    return bench_lat ? LAT : TPUT;
+bench_make_todo(uint32_t bench_lat, uint32_t bench_rand) {
+    return (bench_lat ? LAT : TPUT) | (bench_rand ? RAND : 0);
 }
 
 void bench_init_common(bench_info_t * bench_info,
@@ -93,13 +93,46 @@ strrchr_bench_init_shared(bench_info_t const * bench_info,
 }
 
 static void
-strrchr_bench_init(bench_info_t const * bench_info) {
+strrchr_bench_init(bench_info_t * bench_info) {
     strrchr_bench_init_shared(bench_info, 1);
 }
 
 static void
-wcsrchr_bench_init(bench_info_t const * bench_info) {
+wcsrchr_bench_init(bench_info_t * bench_info) {
     strrchr_bench_init_shared(bench_info, 4);
 }
 
+static void
+memcpy_bench_init(bench_info_t * bench_info) {
+    die_assert(bench_info);
+    die_assert(bench_info->s0);
+    bench_info->extra = (void *)new_memcpy_confs(
+        bench_info->todo, bench_info->sz0, bench_info->sz1,
+        (bench_info->v1 | (bench_info->v0 << 1)));
+    bench_info->extra_sz = NCONFS * sizeof(memcpy_conf_t);
+}
+
+static void
+memcmp_bench_init(bench_info_t * bench_info) {
+    die_assert(bench_info);
+    die_assert(bench_info->s0);
+    die_assert(bench_info->s1);
+
+    uint8_t * _s0, *_s1;
+    uint32_t _sz0, _sz1;
+
+    _s0 = bench_info->s0;
+    _s1 = bench_info->s1;
+
+    _sz0 = bench_info->sz0;
+    _sz1 = bench_info->sz1;
+
+    memset_c(_s0, 0x01, _sz0);
+    memset_c(_s1, 0x01, _sz0);
+
+    memset_c(_s0 + _sz1, 0x02, 1);
+}
+
+#define memcmpeq_bench_init memcmp_bench_init
+#define wmemcmp_bench_init  empty_bench_init
 #endif

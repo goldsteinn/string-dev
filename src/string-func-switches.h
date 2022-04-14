@@ -9,15 +9,38 @@
 #define add_func(func) FUNC_T(func) CAT(run_, func)
 
 typedef union func_switch {
-    add_func(strrchr);
-    add_func(strchr);
-    add_func(wcschr);
-    add_func(wcsrchr);
-    add_func(wcschrnul);
-    add_func(strchrnul);
     add_func(memchr);
-    add_func(wmemchr);
+    add_func(memcmp);
+    add_func(memcpy);
+    add_func(memmove);
+    add_func(memrchr);
+    add_func(memset);
     add_func(rawmemchr);
+    add_func(stpcpy);
+    add_func(stpncpy);
+    add_func(strcat);
+    add_func(strchr);
+    add_func(strchrnul);
+    add_func(strcpy);
+    add_func(strlen);
+    add_func(strncat);
+    add_func(strncpy);
+    add_func(strrchr);
+    add_func(wcpcpy);
+    add_func(wcpncpy);
+    add_func(wcscat);
+    add_func(wcschr);
+    add_func(wcschrnul);
+    add_func(wcscpy);
+    add_func(wcslen);
+    add_func(wcsncat);
+    add_func(wcsncpy);
+    add_func(wcsrchr);
+    add_func(wmemchr);
+    add_func(wmemcmp);
+    add_func(wmemcpy);
+    add_func(wmemmove);
+    add_func(wmemset);
 } func_switch_t;
 
 

@@ -1,0 +1,5585 @@
+From 1cccebacfe064283f1a0977bd8de5b02c9df6a2b Mon Sep 17 00:00:00 2001
+From: Noah Goldstein <goldstein.w.n@gmail.com>
+Date: Fri, 8 Apr 2022 20:06:59 -0500
+Subject: [PATCH v1] bench
+
+---
+ benchtests/Makefile                         |   65 -
+ sysdeps/x86/sysdep.h                        |    2 +-
+ sysdeps/x86_64/multiarch/Makefile           |   18 +
+ sysdeps/x86_64/multiarch/ifunc-impl-list.c  | 1308 ++++++++++---------
+ sysdeps/x86_64/multiarch/memcmp-avx2-v0.S   |  556 ++++++++
+ sysdeps/x86_64/multiarch/memcmp-sse2-v0.S   |  528 ++++++++
+ sysdeps/x86_64/multiarch/memcmp-sse2-v1.S   |  527 ++++++++
+ sysdeps/x86_64/multiarch/memcmp-sse2-v2.S   |  547 ++++++++
+ sysdeps/x86_64/multiarch/memcmp-sse2-v3.S   |  541 ++++++++
+ sysdeps/x86_64/multiarch/memcmp-sse2-v4.S   |  549 ++++++++
+ sysdeps/x86_64/multiarch/memcmpeq-sse2-v0.S |    3 +
+ sysdeps/x86_64/multiarch/memcmpeq-sse2-v1.S |    3 +
+ sysdeps/x86_64/multiarch/memcmpeq-sse2-v2.S |    3 +
+ sysdeps/x86_64/multiarch/memcmpeq-sse2-v3.S |    3 +
+ sysdeps/x86_64/multiarch/memcmpeq-sse2-v4.S |    3 +
+ sysdeps/x86_64/multiarch/memcmpeq-sse2-v5.S |  490 +++++++
+ sysdeps/x86_64/multiarch/wmemcmp-avx2-v0.S  |    3 +
+ sysdeps/x86_64/multiarch/wmemcmp-sse2-v0.S  |    3 +
+ sysdeps/x86_64/multiarch/wmemcmp-sse2-v1.S  |    3 +
+ sysdeps/x86_64/multiarch/wmemcmp-sse2-v2.S  |    3 +
+ sysdeps/x86_64/multiarch/wmemcmp-sse2-v3.S  |    3 +
+ sysdeps/x86_64/multiarch/wmemcmp-sse2-v4.S  |    3 +
+ 22 files changed, 4469 insertions(+), 695 deletions(-)
+ create mode 100644 sysdeps/x86_64/multiarch/memcmp-avx2-v0.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmp-sse2-v0.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmp-sse2-v1.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmp-sse2-v2.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmp-sse2-v3.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmp-sse2-v4.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmpeq-sse2-v0.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmpeq-sse2-v1.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmpeq-sse2-v2.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmpeq-sse2-v3.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmpeq-sse2-v4.S
+ create mode 100644 sysdeps/x86_64/multiarch/memcmpeq-sse2-v5.S
+ create mode 100644 sysdeps/x86_64/multiarch/wmemcmp-avx2-v0.S
+ create mode 100644 sysdeps/x86_64/multiarch/wmemcmp-sse2-v0.S
+ create mode 100644 sysdeps/x86_64/multiarch/wmemcmp-sse2-v1.S
+ create mode 100644 sysdeps/x86_64/multiarch/wmemcmp-sse2-v2.S
+ create mode 100644 sysdeps/x86_64/multiarch/wmemcmp-sse2-v3.S
+ create mode 100644 sysdeps/x86_64/multiarch/wmemcmp-sse2-v4.S
+
+diff --git a/benchtests/Makefile b/benchtests/Makefile
+index 8dfca592fd..6c31acbd22 100644
+--- a/benchtests/Makefile
++++ b/benchtests/Makefile
+@@ -119,79 +119,14 @@ endif
+ 
+ # String function benchmarks.
+ string-benchset := \
+-  bzero \
+-  bzero-large \
+-  bzero-walk \
+-  memccpy \
+-  memchr \
+   memcmp \
+   memcmpeq \
+-  memcpy \
+-  memcpy-large \
+-  memcpy-random \
+-  memcpy-walk \
+-  memmem \
+-  memmove \
+-  memmove-large \
+-  memmove-walk \
+-  mempcpy \
+-  memrchr \
+-  memset \
+-  memset-large \
+-  memset-walk \
+-  memset-zero \
+-  memset-zero-large \
+-  memset-zero-walk \
+-  rawmemchr \
+-  stpcpy \
+-  stpcpy_chk \
+-  stpncpy \
+-  strcasecmp \
+-  strcasestr \
+-  strcat \
+-  strchr \
+-  strchrnul \
+-  strcmp \
+-  strcoll \
+-  strcpy \
+-  strcpy_chk \
+-  strcspn \
+-  strlen \
+-  strncasecmp \
+-  strncat \
+-  strncmp \
+-  strncpy \
+-  strnlen \
+-  strpbrk \
+-  strrchr \
+-  strsep \
+-  strspn \
+-  strstr \
+-  strtok \
+ # string-benchset
+ 
+ # Build and run locale-dependent benchmarks only if we're building natively.
+ ifeq (no,$(cross-compiling))
+ wcsmbs-benchset := \
+-  wcpcpy \
+-  wcpncpy \
+-  wcscat \
+-  wcschr \
+-  wcschrnul \
+-  wcscmp \
+-  wcscpy \
+-  wcscspn \
+-  wcslen \
+-  wcsncat \
+-  wcsncmp \
+-  wcsncpy \
+-  wcsnlen \
+-  wcspbrk \
+-  wcsrchr \
+-  wcsspn \
+-  wmemchr \
+   wmemcmp \
+-  wmemset \
+ # wcsmbs-benchset
+ else
+ wcsmbs-benchset :=
+diff --git a/sysdeps/x86/sysdep.h b/sysdeps/x86/sysdep.h
+index 007a1eb13d..81b739526c 100644
+--- a/sysdeps/x86/sysdep.h
++++ b/sysdeps/x86/sysdep.h
+@@ -81,7 +81,7 @@ enum cf_protection_level
+ #define	ENTRY_P2ALIGN(name, alignment)					      \
+   .globl C_SYMBOL_NAME(name);						      \
+   .type C_SYMBOL_NAME(name),@function;					      \
+-  .align ALIGNARG(alignment);						      \
++  .align ALIGNARG(12);						      \
+   C_LABEL(name)								      \
+   cfi_startproc;							      \
+   _CET_ENDBR;								      \
+diff --git a/sysdeps/x86_64/multiarch/Makefile b/sysdeps/x86_64/multiarch/Makefile
+index 6507d1b7fa..0c519e8cd9 100644
+--- a/sysdeps/x86_64/multiarch/Makefile
++++ b/sysdeps/x86_64/multiarch/Makefile
+@@ -7,6 +7,18 @@ sysdep_routines += \
+   memchr-evex \
+   memchr-evex-rtm \
+   memchr-sse2 \
++  memcmp-avx2-v0 \
++  memcmp-sse2-v0 \
++  memcmp-sse2-v1 \
++  memcmp-sse2-v2 \
++  memcmp-sse2-v3 \
++  memcmp-sse2-v4 \
++  memcmpeq-sse2-v0 \
++  memcmpeq-sse2-v1 \
++  memcmpeq-sse2-v2 \
++  memcmpeq-sse2-v3 \
++  memcmpeq-sse2-v4 \
++  memcmpeq-sse2-v5 \
+   memcmp-avx2-movbe \
+   memcmp-avx2-movbe-rtm \
+   memcmp-evex-movbe \
+@@ -174,6 +186,12 @@ sysdep_routines += \
+   wmemchr-evex \
+   wmemchr-evex-rtm \
+   wmemchr-sse2 \
++  wmemcmp-avx2-v0 \
++  wmemcmp-sse2-v0 \
++  wmemcmp-sse2-v1 \
++  wmemcmp-sse2-v2 \
++  wmemcmp-sse2-v3 \
++  wmemcmp-sse2-v4 \
+   wmemcmp-avx2-movbe \
+   wmemcmp-avx2-movbe-rtm \
+   wmemcmp-c \
+diff --git a/sysdeps/x86_64/multiarch/ifunc-impl-list.c b/sysdeps/x86_64/multiarch/ifunc-impl-list.c
+index 40cc6cc49e..6b2ed72e8a 100644
+--- a/sysdeps/x86_64/multiarch/ifunc-impl-list.c
++++ b/sysdeps/x86_64/multiarch/ifunc-impl-list.c
+@@ -54,6 +54,12 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __memcmpeq_evex)
++	      IFUNC_IMPL_ADD (array, i, __memcmpeq, 1, __memcmpeq_sse2_v0)
++	      IFUNC_IMPL_ADD (array, i, __memcmpeq, 1, __memcmpeq_sse2_v1)
++	      IFUNC_IMPL_ADD (array, i, __memcmpeq, 1, __memcmpeq_sse2_v2)
++	      IFUNC_IMPL_ADD (array, i, __memcmpeq, 1, __memcmpeq_sse2_v3)
++	      IFUNC_IMPL_ADD (array, i, __memcmpeq, 1, __memcmpeq_sse2_v4)
++	      IFUNC_IMPL_ADD (array, i, __memcmpeq, 1, __memcmpeq_sse2_v5)
+ 	      IFUNC_IMPL_ADD (array, i, __memcmpeq, 1, __memcmpeq_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/memchr.c.  */
+@@ -96,6 +102,12 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			       && CPU_FEATURE_USABLE (BMI2)
+ 			       && CPU_FEATURE_USABLE (MOVBE)),
+ 			      __memcmp_evex_movbe)
++	      IFUNC_IMPL_ADD (array, i, memcmp, 1, __memcmp_sse2_v0)
++	      IFUNC_IMPL_ADD (array, i, memcmp, 1, __memcmp_sse2_v1)
++	      IFUNC_IMPL_ADD (array, i, memcmp, 1, __memcmp_sse2_v2)
++	      IFUNC_IMPL_ADD (array, i, memcmp, 1, __memcmp_sse2_v3)
++	      IFUNC_IMPL_ADD (array, i, memcmp, 1, __memcmp_sse2_v4)
++	      IFUNC_IMPL_ADD (array, i, memcmp, 1, __memcmp_avx2_v0)
+ 	      IFUNC_IMPL_ADD (array, i, memcmp, CPU_FEATURE_USABLE (SSE4_1),
+ 			      __memcmp_sse4_1)
+ 	      IFUNC_IMPL_ADD (array, i, memcmp, CPU_FEATURE_USABLE (SSSE3),
+@@ -262,177 +274,177 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			      __memset_sse2_unaligned_erms)
+ 	      IFUNC_IMPL_ADD (array, i, memset, 1, __memset_erms)
+ 	      IFUNC_IMPL_ADD (array, i, memset,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __memset_avx2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      CPU_FEATURE_USABLE (AVX2),
++			      CPU_FEATURE_USABLE (AVX2),__memset_avx2_unaligned)
++	      IFUNC_IMPL_ADD (array, i, memset, CPU_FEATURE_USABLE (AVX2),
+ 			      __memset_avx2_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __memset_avx2_unaligned_rtm)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __memset_avx2_unaligned_erms_rtm)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __memset_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __memset_evex_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __memset_avx512_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __memset_avx512_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, memset,
+-			      CPU_FEATURE_USABLE (AVX512F),
+-			      __memset_avx512_no_vzeroupper)
+-	     )
++		  IFUNC_IMPL_ADD (
++		      array, i, memset,
++		      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++		      __memset_avx2_unaligned_rtm)
++		      IFUNC_IMPL_ADD (array, i, memset,
++				      (CPU_FEATURE_USABLE (AVX2)
++				       && CPU_FEATURE_USABLE (RTM)),
++				      __memset_avx2_unaligned_erms_rtm)
++			  IFUNC_IMPL_ADD (array, i, memset,
++					  (CPU_FEATURE_USABLE (AVX512VL)
++					   && CPU_FEATURE_USABLE (AVX512BW)
++					   && CPU_FEATURE_USABLE (BMI2)),
++					  __memset_evex_unaligned)
++			      IFUNC_IMPL_ADD (array, i, memset,
++					      (CPU_FEATURE_USABLE (AVX512VL)
++					       && CPU_FEATURE_USABLE (AVX512BW)
++					       && CPU_FEATURE_USABLE (BMI2)),
++					      __memset_evex_unaligned_erms)
++				  IFUNC_IMPL_ADD (
++				      array, i, memset,
++				      (CPU_FEATURE_USABLE (AVX512VL)
++				       && CPU_FEATURE_USABLE (AVX512BW)
++				       && CPU_FEATURE_USABLE (BMI2)),
++				      __memset_avx512_unaligned_erms)
++				      IFUNC_IMPL_ADD (
++					  array, i, memset,
++					  (CPU_FEATURE_USABLE (AVX512VL)
++					   && CPU_FEATURE_USABLE (AVX512BW)
++					   && CPU_FEATURE_USABLE (BMI2)),
++					  __memset_avx512_unaligned)
++					  IFUNC_IMPL_ADD (
++					      array, i, memset,
++					      CPU_FEATURE_USABLE (AVX512F),
++					      __memset_avx512_no_vzeroupper))
+ 
+   /* Support sysdeps/x86_64/multiarch/bzero.c.  */
+-  IFUNC_IMPL (i, name, bzero,
+-	      IFUNC_IMPL_ADD (array, i, bzero, 1,
+-			      __bzero_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, bzero, 1,
+-			      __bzero_sse2_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      CPU_FEATURE_USABLE (AVX2),
++  IFUNC_IMPL (
++      i, name, bzero,
++      IFUNC_IMPL_ADD (array, i, bzero, 1, __bzero_sse2_unaligned)
++	  IFUNC_IMPL_ADD (array, i, bzero, 1, __bzero_sse2_unaligned_erms)
++	      IFUNC_IMPL_ADD (array, i, bzero, CPU_FEATURE_USABLE (AVX2),
+ 			      __bzero_avx2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __bzero_avx2_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __bzero_avx2_unaligned_rtm)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __bzero_avx2_unaligned_erms_rtm)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __bzero_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __bzero_evex_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __bzero_avx512_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, bzero,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __bzero_avx512_unaligned)
+-	     )
++		  IFUNC_IMPL_ADD (array, i, bzero, CPU_FEATURE_USABLE (AVX2),
++				  __bzero_avx2_unaligned_erms)
++		      IFUNC_IMPL_ADD (array, i, bzero,
++				      (CPU_FEATURE_USABLE (AVX2)
++				       && CPU_FEATURE_USABLE (RTM)),
++				      __bzero_avx2_unaligned_rtm)
++			  IFUNC_IMPL_ADD (array, i, bzero,
++					  (CPU_FEATURE_USABLE (AVX2)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __bzero_avx2_unaligned_erms_rtm)
++			      IFUNC_IMPL_ADD (array, i, bzero,
++					      (CPU_FEATURE_USABLE (AVX512VL)
++					       && CPU_FEATURE_USABLE (AVX512BW)
++					       && CPU_FEATURE_USABLE (BMI2)),
++					      __bzero_evex_unaligned)
++				  IFUNC_IMPL_ADD (
++				      array, i, bzero,
++				      (CPU_FEATURE_USABLE (AVX512VL)
++				       && CPU_FEATURE_USABLE (AVX512BW)
++				       && CPU_FEATURE_USABLE (BMI2)),
++				      __bzero_evex_unaligned_erms)
++				      IFUNC_IMPL_ADD (
++					  array, i, bzero,
++					  (CPU_FEATURE_USABLE (AVX512VL)
++					   && CPU_FEATURE_USABLE (AVX512BW)
++					   && CPU_FEATURE_USABLE (BMI2)),
++					  __bzero_avx512_unaligned_erms)
++					  IFUNC_IMPL_ADD (
++					      array, i, bzero,
++					      (CPU_FEATURE_USABLE (AVX512VL)
++					       && CPU_FEATURE_USABLE (AVX512BW)
++					       && CPU_FEATURE_USABLE (BMI2)),
++					      __bzero_avx512_unaligned))
+ 
+   /* Support sysdeps/x86_64/multiarch/rawmemchr.c.  */
+   IFUNC_IMPL (i, name, rawmemchr,
+-	      IFUNC_IMPL_ADD (array, i, rawmemchr,
+-			      CPU_FEATURE_USABLE (AVX2),
++	      IFUNC_IMPL_ADD (array, i, rawmemchr, CPU_FEATURE_USABLE (AVX2),
+ 			      __rawmemchr_avx2)
+-	      IFUNC_IMPL_ADD (array, i, rawmemchr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __rawmemchr_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, rawmemchr,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __rawmemchr_evex)
+-	      IFUNC_IMPL_ADD (array, i, rawmemchr,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __rawmemchr_evex_rtm)
+-	      IFUNC_IMPL_ADD (array, i, rawmemchr, 1, __rawmemchr_sse2))
++		  IFUNC_IMPL_ADD (
++		      array, i, rawmemchr,
++		      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++		      __rawmemchr_avx2_rtm)
++		      IFUNC_IMPL_ADD (array, i, rawmemchr,
++				      (CPU_FEATURE_USABLE (AVX512VL)
++				       && CPU_FEATURE_USABLE (AVX512BW)
++				       && CPU_FEATURE_USABLE (BMI2)),
++				      __rawmemchr_evex)
++			  IFUNC_IMPL_ADD (array, i, rawmemchr,
++					  (CPU_FEATURE_USABLE (AVX512VL)
++					   && CPU_FEATURE_USABLE (AVX512BW)
++					   && CPU_FEATURE_USABLE (BMI2)),
++					  __rawmemchr_evex_rtm)
++			      IFUNC_IMPL_ADD (array, i, rawmemchr, 1,
++					      __rawmemchr_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strlen.c.  */
+   IFUNC_IMPL (i, name, strlen,
+-	      IFUNC_IMPL_ADD (array, i, strlen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __strlen_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strlen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strlen_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strlen,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __strlen_evex)
+-	      IFUNC_IMPL_ADD (array, i, strlen, 1, __strlen_sse2))
++	      IFUNC_IMPL_ADD (
++		  array, i, strlen,
++		  (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)),
++		  __strlen_avx2) IFUNC_IMPL_ADD (array, i, strlen,
++						 (CPU_FEATURE_USABLE (AVX2)
++						  && CPU_FEATURE_USABLE (BMI2)
++						  && CPU_FEATURE_USABLE (RTM)),
++						 __strlen_avx2_rtm)
++		  IFUNC_IMPL_ADD (array, i, strlen,
++				  (CPU_FEATURE_USABLE (AVX512VL)
++				   && CPU_FEATURE_USABLE (AVX512BW)
++				   && CPU_FEATURE_USABLE (BMI2)),
++				  __strlen_evex)
++		      IFUNC_IMPL_ADD (array, i, strlen, 1, __strlen_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strnlen.c.  */
+-  IFUNC_IMPL (i, name, strnlen,
+-	      IFUNC_IMPL_ADD (array, i, strnlen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __strnlen_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strnlen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strnlen_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, strnlen,
++      IFUNC_IMPL_ADD (array, i, strnlen,
++		      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)),
++		      __strnlen_avx2)
++	  IFUNC_IMPL_ADD (array, i, strnlen,
++			  (CPU_FEATURE_USABLE (AVX2)
++			   && CPU_FEATURE_USABLE (BMI2)
++			   && CPU_FEATURE_USABLE (RTM)),
++			  __strnlen_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, strnlen,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __strnlen_evex)
+-	      IFUNC_IMPL_ADD (array, i, strnlen, 1, __strnlen_sse2))
++		  IFUNC_IMPL_ADD (array, i, strnlen, 1, __strnlen_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/stpncpy.c.  */
+   IFUNC_IMPL (i, name, stpncpy,
+ 	      IFUNC_IMPL_ADD (array, i, stpncpy, CPU_FEATURE_USABLE (SSSE3),
+ 			      __stpncpy_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, stpncpy, CPU_FEATURE_USABLE (AVX2),
+-			      __stpncpy_avx2)
+-	      IFUNC_IMPL_ADD (array, i, stpncpy,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __stpncpy_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, stpncpy,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)),
+-			      __stpncpy_evex)
+-	      IFUNC_IMPL_ADD (array, i, stpncpy, 1,
+-			      __stpncpy_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, stpncpy, 1, __stpncpy_sse2))
++		  IFUNC_IMPL_ADD (array, i, stpncpy, CPU_FEATURE_USABLE (AVX2),
++				  __stpncpy_avx2)
++		      IFUNC_IMPL_ADD (array, i, stpncpy,
++				      (CPU_FEATURE_USABLE (AVX2)
++				       && CPU_FEATURE_USABLE (RTM)),
++				      __stpncpy_avx2_rtm)
++			  IFUNC_IMPL_ADD (array, i, stpncpy,
++					  (CPU_FEATURE_USABLE (AVX512VL)
++					   && CPU_FEATURE_USABLE (AVX512BW)),
++					  __stpncpy_evex)
++			      IFUNC_IMPL_ADD (array, i, stpncpy, 1,
++					      __stpncpy_sse2_unaligned)
++				  IFUNC_IMPL_ADD (array, i, stpncpy, 1,
++						  __stpncpy_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/stpcpy.c.  */
+-  IFUNC_IMPL (i, name, stpcpy,
+-	      IFUNC_IMPL_ADD (array, i, stpcpy, CPU_FEATURE_USABLE (SSSE3),
+-			      __stpcpy_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, stpcpy, CPU_FEATURE_USABLE (AVX2),
+-			      __stpcpy_avx2)
+-	      IFUNC_IMPL_ADD (array, i, stpcpy,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __stpcpy_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, stpcpy,
++      IFUNC_IMPL_ADD (array, i, stpcpy, CPU_FEATURE_USABLE (SSSE3),
++		      __stpcpy_ssse3)
++	  IFUNC_IMPL_ADD (
++	      array, i, stpcpy, CPU_FEATURE_USABLE (AVX2),
++	      __stpcpy_avx2) IFUNC_IMPL_ADD (array, i, stpcpy,
++					     (CPU_FEATURE_USABLE (AVX2)
++					      && CPU_FEATURE_USABLE (RTM)),
++					     __stpcpy_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, stpcpy,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)),
+ 			      __stpcpy_evex)
+-	      IFUNC_IMPL_ADD (array, i, stpcpy, 1, __stpcpy_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, stpcpy, 1, __stpcpy_sse2))
++		  IFUNC_IMPL_ADD (array, i, stpcpy, 1, __stpcpy_sse2_unaligned)
++		      IFUNC_IMPL_ADD (array, i, stpcpy, 1, __stpcpy_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strcasecmp_l.c.  */
+   IFUNC_IMPL (i, name, strcasecmp,
+@@ -440,20 +452,20 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)),
+ 			      __strcasecmp_evex)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __strcasecmp_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strcasecmp_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp,
+-			      CPU_FEATURE_USABLE (SSE4_2),
+-			      __strcasecmp_sse42)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __strcasecmp_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp, 1, __strcasecmp_sse2))
++		  IFUNC_IMPL_ADD (array, i, strcasecmp,
++				  CPU_FEATURE_USABLE (AVX2), __strcasecmp_avx2)
++		      IFUNC_IMPL_ADD (array, i, strcasecmp,
++				      (CPU_FEATURE_USABLE (AVX2)
++				       && CPU_FEATURE_USABLE (RTM)),
++				      __strcasecmp_avx2_rtm)
++			  IFUNC_IMPL_ADD (array, i, strcasecmp,
++					  CPU_FEATURE_USABLE (SSE4_2),
++					  __strcasecmp_sse42)
++			      IFUNC_IMPL_ADD (array, i, strcasecmp,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __strcasecmp_ssse3)
++				  IFUNC_IMPL_ADD (array, i, strcasecmp, 1,
++						  __strcasecmp_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strcasecmp_l.c.  */
+   IFUNC_IMPL (i, name, strcasecmp_l,
+@@ -461,156 +473,157 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)),
+ 			      __strcasecmp_l_evex)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __strcasecmp_l_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strcasecmp_l_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp_l,
+-			      CPU_FEATURE_USABLE (SSE4_2),
+-			      __strcasecmp_l_sse42)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp_l,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __strcasecmp_l_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strcasecmp_l, 1,
+-			      __strcasecmp_l_sse2))
++		  IFUNC_IMPL_ADD (array, i, strcasecmp,
++				  CPU_FEATURE_USABLE (AVX2),
++				  __strcasecmp_l_avx2)
++		      IFUNC_IMPL_ADD (array, i, strcasecmp,
++				      (CPU_FEATURE_USABLE (AVX2)
++				       && CPU_FEATURE_USABLE (RTM)),
++				      __strcasecmp_l_avx2_rtm)
++			  IFUNC_IMPL_ADD (array, i, strcasecmp_l,
++					  CPU_FEATURE_USABLE (SSE4_2),
++					  __strcasecmp_l_sse42)
++			      IFUNC_IMPL_ADD (array, i, strcasecmp_l,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __strcasecmp_l_ssse3)
++				  IFUNC_IMPL_ADD (array, i, strcasecmp_l, 1,
++						  __strcasecmp_l_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strcat.c.  */
+-  IFUNC_IMPL (i, name, strcat,
+-	      IFUNC_IMPL_ADD (array, i, strcat, CPU_FEATURE_USABLE (AVX2),
+-			      __strcat_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strcat,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strcat_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strcat,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)),
+-			      __strcat_evex)
++  IFUNC_IMPL (
++      i, name, strcat,
++      IFUNC_IMPL_ADD (
++	  array, i, strcat, CPU_FEATURE_USABLE (AVX2),
++	  __strcat_avx2) IFUNC_IMPL_ADD (array, i, strcat,
++					 (CPU_FEATURE_USABLE (AVX2)
++					  && CPU_FEATURE_USABLE (RTM)),
++					 __strcat_avx2_rtm)
++	  IFUNC_IMPL_ADD (
++	      array, i, strcat,
++	      (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)),
++	      __strcat_evex)
+ 	      IFUNC_IMPL_ADD (array, i, strcat, CPU_FEATURE_USABLE (SSSE3),
+ 			      __strcat_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strcat, 1, __strcat_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, strcat, 1, __strcat_sse2))
++		  IFUNC_IMPL_ADD (array, i, strcat, 1, __strcat_sse2_unaligned)
++		      IFUNC_IMPL_ADD (array, i, strcat, 1, __strcat_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strchr.c.  */
+-  IFUNC_IMPL (i, name, strchr,
+-	      IFUNC_IMPL_ADD (array, i, strchr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __strchr_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strchr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strchr_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, strchr,
++      IFUNC_IMPL_ADD (array, i, strchr,
++		      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)),
++		      __strchr_avx2)
++	  IFUNC_IMPL_ADD (array, i, strchr,
++			  (CPU_FEATURE_USABLE (AVX2)
++			   && CPU_FEATURE_USABLE (BMI2)
++			   && CPU_FEATURE_USABLE (RTM)),
++			  __strchr_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, strchr,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __strchr_evex)
+-	      IFUNC_IMPL_ADD (array, i, strchr, 1, __strchr_sse2_no_bsf)
+-	      IFUNC_IMPL_ADD (array, i, strchr, 1, __strchr_sse2))
++		  IFUNC_IMPL_ADD (array, i, strchr, 1, __strchr_sse2_no_bsf)
++		      IFUNC_IMPL_ADD (array, i, strchr, 1, __strchr_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strchrnul.c.  */
+-  IFUNC_IMPL (i, name, strchrnul,
+-	      IFUNC_IMPL_ADD (array, i, strchrnul,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __strchrnul_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strchrnul,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strchrnul_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, strchrnul,
++      IFUNC_IMPL_ADD (array, i, strchrnul,
++		      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)),
++		      __strchrnul_avx2)
++	  IFUNC_IMPL_ADD (array, i, strchrnul,
++			  (CPU_FEATURE_USABLE (AVX2)
++			   && CPU_FEATURE_USABLE (BMI2)
++			   && CPU_FEATURE_USABLE (RTM)),
++			  __strchrnul_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, strchrnul,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __strchrnul_evex)
+-	      IFUNC_IMPL_ADD (array, i, strchrnul, 1, __strchrnul_sse2))
++		  IFUNC_IMPL_ADD (array, i, strchrnul, 1, __strchrnul_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strrchr.c.  */
+-  IFUNC_IMPL (i, name, strrchr,
+-	      IFUNC_IMPL_ADD (array, i, strrchr,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __strrchr_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strrchr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strrchr_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, strrchr,
++      IFUNC_IMPL_ADD (array, i, strrchr, CPU_FEATURE_USABLE (AVX2),
++		      __strrchr_avx2)
++	  IFUNC_IMPL_ADD (
++	      array, i, strrchr,
++	      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++	      __strrchr_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, strrchr,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)),
+ 			      __strrchr_evex)
+-	      IFUNC_IMPL_ADD (array, i, strrchr, 1, __strrchr_sse2))
++		  IFUNC_IMPL_ADD (array, i, strrchr, 1, __strrchr_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strcmp.c.  */
+-  IFUNC_IMPL (i, name, strcmp,
+-	      IFUNC_IMPL_ADD (array, i, strcmp,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __strcmp_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strcmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strcmp_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strcmp,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __strcmp_evex)
+-	      IFUNC_IMPL_ADD (array, i, strcmp, CPU_FEATURE_USABLE (SSE4_2),
+-			      __strcmp_sse42)
++  IFUNC_IMPL (
++      i, name, strcmp,
++      IFUNC_IMPL_ADD (
++	  array, i, strcmp, CPU_FEATURE_USABLE (AVX2),
++	  __strcmp_avx2) IFUNC_IMPL_ADD (array, i, strcmp,
++					 (CPU_FEATURE_USABLE (AVX2)
++					  && CPU_FEATURE_USABLE (RTM)),
++					 __strcmp_avx2_rtm)
++	  IFUNC_IMPL_ADD (
++	      array, i, strcmp,
++	      (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)
++	       && CPU_FEATURE_USABLE (BMI2)),
++	      __strcmp_evex) IFUNC_IMPL_ADD (array, i, strcmp,
++					     CPU_FEATURE_USABLE (SSE4_2),
++					     __strcmp_sse42)
+ 	      IFUNC_IMPL_ADD (array, i, strcmp, CPU_FEATURE_USABLE (SSSE3),
+ 			      __strcmp_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2))
++		  IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2_unaligned)
++		      IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strcpy.c.  */
+-  IFUNC_IMPL (i, name, strcpy,
+-	      IFUNC_IMPL_ADD (array, i, strcpy, CPU_FEATURE_USABLE (AVX2),
+-			      __strcpy_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strcpy,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strcpy_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strcpy,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)),
+-			      __strcpy_evex)
++  IFUNC_IMPL (
++      i, name, strcpy,
++      IFUNC_IMPL_ADD (
++	  array, i, strcpy, CPU_FEATURE_USABLE (AVX2),
++	  __strcpy_avx2) IFUNC_IMPL_ADD (array, i, strcpy,
++					 (CPU_FEATURE_USABLE (AVX2)
++					  && CPU_FEATURE_USABLE (RTM)),
++					 __strcpy_avx2_rtm)
++	  IFUNC_IMPL_ADD (
++	      array, i, strcpy,
++	      (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)),
++	      __strcpy_evex)
+ 	      IFUNC_IMPL_ADD (array, i, strcpy, CPU_FEATURE_USABLE (SSSE3),
+ 			      __strcpy_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strcpy, 1, __strcpy_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, strcpy, 1, __strcpy_sse2))
++		  IFUNC_IMPL_ADD (array, i, strcpy, 1, __strcpy_sse2_unaligned)
++		      IFUNC_IMPL_ADD (array, i, strcpy, 1, __strcpy_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strcspn.c.  */
+   IFUNC_IMPL (i, name, strcspn,
+ 	      IFUNC_IMPL_ADD (array, i, strcspn, CPU_FEATURE_USABLE (SSE4_2),
+ 			      __strcspn_sse42)
+-	      IFUNC_IMPL_ADD (array, i, strcspn, 1, __strcspn_sse2))
++		  IFUNC_IMPL_ADD (array, i, strcspn, 1, __strcspn_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strncase_l.c.  */
+-  IFUNC_IMPL (i, name, strncasecmp,
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)),
+-			      __strncasecmp_evex)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __strncasecmp_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strncasecmp_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp,
+-			      CPU_FEATURE_USABLE (SSE4_2),
+-			      __strncasecmp_sse42)
++  IFUNC_IMPL (
++      i, name, strncasecmp,
++      IFUNC_IMPL_ADD (
++	  array, i, strncasecmp,
++	  (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)),
++	  __strncasecmp_evex) IFUNC_IMPL_ADD (array, i, strncasecmp,
++					      CPU_FEATURE_USABLE (AVX2),
++					      __strncasecmp_avx2)
++	  IFUNC_IMPL_ADD (
++	      array, i, strncasecmp,
++	      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++	      __strncasecmp_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, strncasecmp,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __strncasecmp_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp, 1,
+-			      __strncasecmp_sse2))
++			      CPU_FEATURE_USABLE (SSE4_2), __strncasecmp_sse42)
++		  IFUNC_IMPL_ADD (array, i, strncasecmp,
++				  CPU_FEATURE_USABLE (SSSE3),
++				  __strncasecmp_ssse3)
++		      IFUNC_IMPL_ADD (array, i, strncasecmp, 1,
++				      __strncasecmp_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strncase_l.c.  */
+   IFUNC_IMPL (i, name, strncasecmp_l,
+@@ -618,468 +631,505 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)),
+ 			      __strncasecmp_l_evex)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __strncasecmp_l_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strncasecmp_l_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp_l,
+-			      CPU_FEATURE_USABLE (SSE4_2),
+-			      __strncasecmp_l_sse42)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp_l,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __strncasecmp_l_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strncasecmp_l, 1,
+-			      __strncasecmp_l_sse2))
++		  IFUNC_IMPL_ADD (array, i, strncasecmp,
++				  CPU_FEATURE_USABLE (AVX2),
++				  __strncasecmp_l_avx2)
++		      IFUNC_IMPL_ADD (array, i, strncasecmp,
++				      (CPU_FEATURE_USABLE (AVX2)
++				       && CPU_FEATURE_USABLE (RTM)),
++				      __strncasecmp_l_avx2_rtm)
++			  IFUNC_IMPL_ADD (array, i, strncasecmp_l,
++					  CPU_FEATURE_USABLE (SSE4_2),
++					  __strncasecmp_l_sse42)
++			      IFUNC_IMPL_ADD (array, i, strncasecmp_l,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __strncasecmp_l_ssse3)
++				  IFUNC_IMPL_ADD (array, i, strncasecmp_l, 1,
++						  __strncasecmp_l_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strncat.c.  */
+-  IFUNC_IMPL (i, name, strncat,
+-	      IFUNC_IMPL_ADD (array, i, strncat, CPU_FEATURE_USABLE (AVX2),
+-			      __strncat_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strncat,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strncat_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strncat,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)),
+-			      __strncat_evex)
+-	      IFUNC_IMPL_ADD (array, i, strncat, CPU_FEATURE_USABLE (SSSE3),
+-			      __strncat_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strncat, 1,
+-			      __strncat_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, strncat, 1, __strncat_sse2))
++  IFUNC_IMPL (
++      i, name, strncat,
++      IFUNC_IMPL_ADD (
++	  array, i, strncat, CPU_FEATURE_USABLE (AVX2),
++	  __strncat_avx2) IFUNC_IMPL_ADD (array, i, strncat,
++					  (CPU_FEATURE_USABLE (AVX2)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __strncat_avx2_rtm)
++	  IFUNC_IMPL_ADD (
++	      array, i, strncat,
++	      (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)),
++	      __strncat_evex) IFUNC_IMPL_ADD (array, i, strncat,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __strncat_ssse3)
++	      IFUNC_IMPL_ADD (array, i, strncat, 1, __strncat_sse2_unaligned)
++		  IFUNC_IMPL_ADD (array, i, strncat, 1, __strncat_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strncpy.c.  */
+-  IFUNC_IMPL (i, name, strncpy,
+-	      IFUNC_IMPL_ADD (array, i, strncpy, CPU_FEATURE_USABLE (AVX2),
+-			      __strncpy_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strncpy,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strncpy_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strncpy,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)),
+-			      __strncpy_evex)
+-	      IFUNC_IMPL_ADD (array, i, strncpy, CPU_FEATURE_USABLE (SSSE3),
+-			      __strncpy_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strncpy, 1,
+-			      __strncpy_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, strncpy, 1, __strncpy_sse2))
++  IFUNC_IMPL (
++      i, name, strncpy,
++      IFUNC_IMPL_ADD (
++	  array, i, strncpy, CPU_FEATURE_USABLE (AVX2),
++	  __strncpy_avx2) IFUNC_IMPL_ADD (array, i, strncpy,
++					  (CPU_FEATURE_USABLE (AVX2)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __strncpy_avx2_rtm)
++	  IFUNC_IMPL_ADD (
++	      array, i, strncpy,
++	      (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)),
++	      __strncpy_evex) IFUNC_IMPL_ADD (array, i, strncpy,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __strncpy_ssse3)
++	      IFUNC_IMPL_ADD (array, i, strncpy, 1, __strncpy_sse2_unaligned)
++		  IFUNC_IMPL_ADD (array, i, strncpy, 1, __strncpy_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strpbrk.c.  */
+   IFUNC_IMPL (i, name, strpbrk,
+ 	      IFUNC_IMPL_ADD (array, i, strpbrk, CPU_FEATURE_USABLE (SSE4_2),
+ 			      __strpbrk_sse42)
+-	      IFUNC_IMPL_ADD (array, i, strpbrk, 1, __strpbrk_sse2))
+-
++		  IFUNC_IMPL_ADD (array, i, strpbrk, 1, __strpbrk_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strspn.c.  */
+   IFUNC_IMPL (i, name, strspn,
+ 	      IFUNC_IMPL_ADD (array, i, strspn, CPU_FEATURE_USABLE (SSE4_2),
+ 			      __strspn_sse42)
+-	      IFUNC_IMPL_ADD (array, i, strspn, 1, __strspn_sse2))
++		  IFUNC_IMPL_ADD (array, i, strspn, 1, __strspn_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/strstr.c.  */
+   IFUNC_IMPL (i, name, strstr,
+ 	      IFUNC_IMPL_ADD (array, i, strstr, 1, __strstr_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, strstr, 1, __strstr_sse2))
++		  IFUNC_IMPL_ADD (array, i, strstr, 1, __strstr_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wcschr.c.  */
+   IFUNC_IMPL (i, name, wcschr,
+-	      IFUNC_IMPL_ADD (array, i, wcschr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wcschr_avx2)
+-	      IFUNC_IMPL_ADD (array, i, wcschr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wcschr_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, wcschr,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wcschr_evex)
+-	      IFUNC_IMPL_ADD (array, i, wcschr, 1, __wcschr_sse2))
++	      IFUNC_IMPL_ADD (
++		  array, i, wcschr,
++		  (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)),
++		  __wcschr_avx2) IFUNC_IMPL_ADD (array, i, wcschr,
++						 (CPU_FEATURE_USABLE (AVX2)
++						  && CPU_FEATURE_USABLE (BMI2)
++						  && CPU_FEATURE_USABLE (RTM)),
++						 __wcschr_avx2_rtm)
++		  IFUNC_IMPL_ADD (array, i, wcschr,
++				  (CPU_FEATURE_USABLE (AVX512VL)
++				   && CPU_FEATURE_USABLE (AVX512BW)
++				   && CPU_FEATURE_USABLE (BMI2)),
++				  __wcschr_evex)
++		      IFUNC_IMPL_ADD (array, i, wcschr, 1, __wcschr_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wcsrchr.c.  */
+-  IFUNC_IMPL (i, name, wcsrchr,
+-	      IFUNC_IMPL_ADD (array, i, wcsrchr,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __wcsrchr_avx2)
+-	      IFUNC_IMPL_ADD (array, i, wcsrchr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wcsrchr_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, wcsrchr,
++      IFUNC_IMPL_ADD (array, i, wcsrchr, CPU_FEATURE_USABLE (AVX2),
++		      __wcsrchr_avx2)
++	  IFUNC_IMPL_ADD (
++	      array, i, wcsrchr,
++	      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++	      __wcsrchr_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, wcsrchr,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __wcsrchr_evex)
+-	      IFUNC_IMPL_ADD (array, i, wcsrchr, 1, __wcsrchr_sse2))
++		  IFUNC_IMPL_ADD (array, i, wcsrchr, 1, __wcsrchr_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wcscmp.c.  */
+   IFUNC_IMPL (i, name, wcscmp,
+-	      IFUNC_IMPL_ADD (array, i, wcscmp,
+-			      CPU_FEATURE_USABLE (AVX2),
++	      IFUNC_IMPL_ADD (array, i, wcscmp, CPU_FEATURE_USABLE (AVX2),
+ 			      __wcscmp_avx2)
+-	      IFUNC_IMPL_ADD (array, i, wcscmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wcscmp_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, wcscmp,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wcscmp_evex)
+-	      IFUNC_IMPL_ADD (array, i, wcscmp, 1, __wcscmp_sse2))
++		  IFUNC_IMPL_ADD (
++		      array, i, wcscmp,
++		      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++		      __wcscmp_avx2_rtm)
++		      IFUNC_IMPL_ADD (array, i, wcscmp,
++				      (CPU_FEATURE_USABLE (AVX512VL)
++				       && CPU_FEATURE_USABLE (AVX512BW)
++				       && CPU_FEATURE_USABLE (BMI2)),
++				      __wcscmp_evex)
++			  IFUNC_IMPL_ADD (array, i, wcscmp, 1, __wcscmp_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wcsncmp.c.  */
+-  IFUNC_IMPL (i, name, wcsncmp,
+-	      IFUNC_IMPL_ADD (array, i, wcsncmp,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __wcsncmp_avx2)
+-	      IFUNC_IMPL_ADD (array, i, wcsncmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wcsncmp_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, wcsncmp,
++      IFUNC_IMPL_ADD (array, i, wcsncmp, CPU_FEATURE_USABLE (AVX2),
++		      __wcsncmp_avx2)
++	  IFUNC_IMPL_ADD (
++	      array, i, wcsncmp,
++	      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++	      __wcsncmp_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, wcsncmp,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __wcsncmp_evex)
+-	      IFUNC_IMPL_ADD (array, i, wcsncmp, 1, __wcsncmp_sse2))
++		  IFUNC_IMPL_ADD (array, i, wcsncmp, 1, __wcsncmp_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wcscpy.c.  */
+   IFUNC_IMPL (i, name, wcscpy,
+ 	      IFUNC_IMPL_ADD (array, i, wcscpy, CPU_FEATURE_USABLE (SSSE3),
+ 			      __wcscpy_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, wcscpy, 1, __wcscpy_sse2))
++		  IFUNC_IMPL_ADD (array, i, wcscpy, 1, __wcscpy_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wcslen.c.  */
+-  IFUNC_IMPL (i, name, wcslen,
+-	      IFUNC_IMPL_ADD (array, i, wcslen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wcslen_avx2)
+-	      IFUNC_IMPL_ADD (array, i, wcslen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wcslen_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, wcslen,
++      IFUNC_IMPL_ADD (array, i, wcslen,
++		      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)),
++		      __wcslen_avx2)
++	  IFUNC_IMPL_ADD (array, i, wcslen,
++			  (CPU_FEATURE_USABLE (AVX2)
++			   && CPU_FEATURE_USABLE (BMI2)
++			   && CPU_FEATURE_USABLE (RTM)),
++			  __wcslen_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, wcslen,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __wcslen_evex)
+-	      IFUNC_IMPL_ADD (array, i, wcslen,
+-			      CPU_FEATURE_USABLE (SSE4_1),
+-			      __wcslen_sse4_1)
+-	      IFUNC_IMPL_ADD (array, i, wcslen, 1, __wcslen_sse2))
++		  IFUNC_IMPL_ADD (array, i, wcslen,
++				  CPU_FEATURE_USABLE (SSE4_1), __wcslen_sse4_1)
++		      IFUNC_IMPL_ADD (array, i, wcslen, 1, __wcslen_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wcsnlen.c.  */
+-  IFUNC_IMPL (i, name, wcsnlen,
+-	      IFUNC_IMPL_ADD (array, i, wcsnlen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wcsnlen_avx2)
+-	      IFUNC_IMPL_ADD (array, i, wcsnlen,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wcsnlen_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, wcsnlen,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wcsnlen_evex)
+-	      IFUNC_IMPL_ADD (array, i, wcsnlen,
+-			      CPU_FEATURE_USABLE (SSE4_1),
++  IFUNC_IMPL (
++      i, name, wcsnlen,
++      IFUNC_IMPL_ADD (
++	  array, i, wcsnlen,
++	  (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)),
++	  __wcsnlen_avx2) IFUNC_IMPL_ADD (array, i, wcsnlen,
++					  (CPU_FEATURE_USABLE (AVX2)
++					   && CPU_FEATURE_USABLE (BMI2)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __wcsnlen_avx2_rtm)
++	  IFUNC_IMPL_ADD (array, i, wcsnlen,
++			  (CPU_FEATURE_USABLE (AVX512VL)
++			   && CPU_FEATURE_USABLE (AVX512BW)
++			   && CPU_FEATURE_USABLE (BMI2)),
++			  __wcsnlen_evex)
++	      IFUNC_IMPL_ADD (array, i, wcsnlen, CPU_FEATURE_USABLE (SSE4_1),
+ 			      __wcsnlen_sse4_1)
+-	      IFUNC_IMPL_ADD (array, i, wcsnlen, 1, __wcsnlen_sse2))
++		  IFUNC_IMPL_ADD (array, i, wcsnlen, 1, __wcsnlen_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wmemchr.c.  */
+-  IFUNC_IMPL (i, name, wmemchr,
+-	      IFUNC_IMPL_ADD (array, i, wmemchr,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __wmemchr_avx2)
+-	      IFUNC_IMPL_ADD (array, i, wmemchr,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wmemchr_avx2_rtm)
++  IFUNC_IMPL (
++      i, name, wmemchr,
++      IFUNC_IMPL_ADD (array, i, wmemchr, CPU_FEATURE_USABLE (AVX2),
++		      __wmemchr_avx2)
++	  IFUNC_IMPL_ADD (
++	      array, i, wmemchr,
++	      (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (RTM)),
++	      __wmemchr_avx2_rtm)
+ 	      IFUNC_IMPL_ADD (array, i, wmemchr,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __wmemchr_evex)
+-	      IFUNC_IMPL_ADD (array, i, wmemchr,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wmemchr_evex_rtm)
+-	      IFUNC_IMPL_ADD (array, i, wmemchr, 1, __wmemchr_sse2))
++		  IFUNC_IMPL_ADD (array, i, wmemchr,
++				  (CPU_FEATURE_USABLE (AVX512VL)
++				   && CPU_FEATURE_USABLE (AVX512BW)
++				   && CPU_FEATURE_USABLE (BMI2)),
++				  __wmemchr_evex_rtm)
++		      IFUNC_IMPL_ADD (array, i, wmemchr, 1, __wmemchr_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wmemcmp.c.  */
+-  IFUNC_IMPL (i, name, wmemcmp,
+-	      IFUNC_IMPL_ADD (array, i, wmemcmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (MOVBE)),
+-			      __wmemcmp_avx2_movbe)
+-	      IFUNC_IMPL_ADD (array, i, wmemcmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (MOVBE)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wmemcmp_avx2_movbe_rtm)
+-	      IFUNC_IMPL_ADD (array, i, wmemcmp,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)
+-			       && CPU_FEATURE_USABLE (MOVBE)),
+-			      __wmemcmp_evex_movbe)
++  IFUNC_IMPL (
++      i, name, wmemcmp,
++      IFUNC_IMPL_ADD (
++	  array, i, wmemcmp,
++	  (CPU_FEATURE_USABLE (AVX2) && CPU_FEATURE_USABLE (BMI2)
++	   && CPU_FEATURE_USABLE (MOVBE)),
++	  __wmemcmp_avx2_movbe) IFUNC_IMPL_ADD (array, i, wmemcmp,
++						(CPU_FEATURE_USABLE (AVX2)
++						 && CPU_FEATURE_USABLE (BMI2)
++						 && CPU_FEATURE_USABLE (MOVBE)
++						 && CPU_FEATURE_USABLE (RTM)),
++						__wmemcmp_avx2_movbe_rtm)
++	      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_sse2_v0)
++	      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_sse2_v1)
++	      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_sse2_v2)
++	      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_sse2_v3)
++	      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_sse2_v4)
++	      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_avx2_v0)
++	  IFUNC_IMPL_ADD (
++	      array, i, wmemcmp,
++	      (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)
++	       && CPU_FEATURE_USABLE (BMI2) && CPU_FEATURE_USABLE (MOVBE)),
++	      __wmemcmp_evex_movbe)
+ 	      IFUNC_IMPL_ADD (array, i, wmemcmp, CPU_FEATURE_USABLE (SSE4_1),
+ 			      __wmemcmp_sse4_1)
+-	      IFUNC_IMPL_ADD (array, i, wmemcmp, CPU_FEATURE_USABLE (SSSE3),
+-			      __wmemcmp_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_sse2))
++		  IFUNC_IMPL_ADD (array, i, wmemcmp,
++				  CPU_FEATURE_USABLE (SSSE3), __wmemcmp_ssse3)
++		      IFUNC_IMPL_ADD (array, i, wmemcmp, 1, __wmemcmp_sse2))
+ 
+   /* Support sysdeps/x86_64/multiarch/wmemset.c.  */
+   IFUNC_IMPL (i, name, wmemset,
+-	      IFUNC_IMPL_ADD (array, i, wmemset, 1,
+-			      __wmemset_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, wmemset,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __wmemset_avx2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, wmemset,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __wmemset_avx2_unaligned_rtm)
+-	      IFUNC_IMPL_ADD (array, i, wmemset,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wmemset_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, wmemset,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wmemset_avx512_unaligned))
++	      IFUNC_IMPL_ADD (array, i, wmemset, 1, __wmemset_sse2_unaligned)
++		  IFUNC_IMPL_ADD (array, i, wmemset, CPU_FEATURE_USABLE (AVX2),
++				  __wmemset_avx2_unaligned)
++		      IFUNC_IMPL_ADD (array, i, wmemset,
++				      (CPU_FEATURE_USABLE (AVX2)
++				       && CPU_FEATURE_USABLE (RTM)),
++				      __wmemset_avx2_unaligned_rtm)
++			  IFUNC_IMPL_ADD (array, i, wmemset,
++					  (CPU_FEATURE_USABLE (AVX512VL)
++					   && CPU_FEATURE_USABLE (AVX512BW)
++					   && CPU_FEATURE_USABLE (BMI2)),
++					  __wmemset_evex_unaligned)
++			      IFUNC_IMPL_ADD (array, i, wmemset,
++					      (CPU_FEATURE_USABLE (AVX512VL)
++					       && CPU_FEATURE_USABLE (AVX512BW)
++					       && CPU_FEATURE_USABLE (BMI2)),
++					      __wmemset_avx512_unaligned))
+ 
+ #ifdef SHARED
+   /* Support sysdeps/x86_64/multiarch/memcpy_chk.c.  */
+-  IFUNC_IMPL (i, name, __memcpy_chk,
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512F),
+-			      __memcpy_chk_avx512_no_vzeroupper)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __memcpy_chk_avx512_unaligned)
++  IFUNC_IMPL (
++      i, name, __memcpy_chk,
++      IFUNC_IMPL_ADD (array, i, __memcpy_chk, CPU_FEATURE_USABLE (AVX512F),
++		      __memcpy_chk_avx512_no_vzeroupper)
++	  IFUNC_IMPL_ADD (array, i, __memcpy_chk,
++			  CPU_FEATURE_USABLE (AVX512VL),
++			  __memcpy_chk_avx512_unaligned)
+ 	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+ 			      CPU_FEATURE_USABLE (AVX512VL),
+ 			      __memcpy_chk_avx512_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __memcpy_chk_avx_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __memcpy_chk_avx_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __memcpy_chk_avx_unaligned_rtm)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __memcpy_chk_avx_unaligned_erms_rtm)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __memcpy_chk_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __memcpy_chk_evex_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __memcpy_chk_ssse3_back)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __memcpy_chk_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk, 1,
+-			      __memcpy_chk_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk, 1,
+-			      __memcpy_chk_sse2_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __memcpy_chk, 1,
+-			      __memcpy_chk_erms))
++		  IFUNC_IMPL_ADD (array, i, __memcpy_chk,
++				  CPU_FEATURE_USABLE (AVX),
++				  __memcpy_chk_avx_unaligned)
++		      IFUNC_IMPL_ADD (array, i, __memcpy_chk,
++				      CPU_FEATURE_USABLE (AVX),
++				      __memcpy_chk_avx_unaligned_erms)
++			  IFUNC_IMPL_ADD (array, i, __memcpy_chk,
++					  (CPU_FEATURE_USABLE (AVX)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __memcpy_chk_avx_unaligned_rtm)
++			      IFUNC_IMPL_ADD (
++				  array, i, __memcpy_chk,
++				  (CPU_FEATURE_USABLE (AVX)
++				   && CPU_FEATURE_USABLE (RTM)),
++				  __memcpy_chk_avx_unaligned_erms_rtm)
++				  IFUNC_IMPL_ADD (
++				      array, i, __memcpy_chk,
++				      CPU_FEATURE_USABLE (AVX512VL),
++				      __memcpy_chk_evex_unaligned)
++				      IFUNC_IMPL_ADD (
++					  array, i, __memcpy_chk,
++					  CPU_FEATURE_USABLE (AVX512VL),
++					  __memcpy_chk_evex_unaligned_erms)
++					  IFUNC_IMPL_ADD (
++					      array, i, __memcpy_chk,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __memcpy_chk_ssse3_back)
++					      IFUNC_IMPL_ADD (
++						  array, i, __memcpy_chk,
++						  CPU_FEATURE_USABLE (SSSE3),
++						  __memcpy_chk_ssse3)
++						  IFUNC_IMPL_ADD (
++						      array, i, __memcpy_chk,
++						      1,
++						      __memcpy_chk_sse2_unaligned)
++						      IFUNC_IMPL_ADD (
++							  array, i,
++							  __memcpy_chk, 1,
++							  __memcpy_chk_sse2_unaligned_erms)
++							  IFUNC_IMPL_ADD (
++							      array, i,
++							      __memcpy_chk, 1,
++							      __memcpy_chk_erms))
+ #endif
+ 
+   /* Support sysdeps/x86_64/multiarch/memcpy.c.  */
+-  IFUNC_IMPL (i, name, memcpy,
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __memcpy_avx_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __memcpy_avx_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __memcpy_avx_unaligned_rtm)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __memcpy_avx_unaligned_erms_rtm)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __memcpy_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __memcpy_evex_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
+-			      __memcpy_ssse3_back)
+-	      IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
+-			      __memcpy_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      CPU_FEATURE_USABLE (AVX512F),
+-			      __memcpy_avx512_no_vzeroupper)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __memcpy_avx512_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, memcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __memcpy_avx512_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, memcpy, 1, __memcpy_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, memcpy, 1,
+-			      __memcpy_sse2_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, memcpy, 1, __memcpy_erms))
++  IFUNC_IMPL (
++      i, name, memcpy,
++      IFUNC_IMPL_ADD (
++	  array, i, memcpy, CPU_FEATURE_USABLE (AVX),
++	  __memcpy_avx_unaligned) IFUNC_IMPL_ADD (array, i, memcpy,
++						  CPU_FEATURE_USABLE (AVX),
++						  __memcpy_avx_unaligned_erms)
++	  IFUNC_IMPL_ADD (
++	      array, i, memcpy,
++	      (CPU_FEATURE_USABLE (AVX) && CPU_FEATURE_USABLE (RTM)),
++	      __memcpy_avx_unaligned_rtm)
++	      IFUNC_IMPL_ADD (
++		  array, i, memcpy,
++		  (CPU_FEATURE_USABLE (AVX) && CPU_FEATURE_USABLE (RTM)),
++		  __memcpy_avx_unaligned_erms_rtm)
++		  IFUNC_IMPL_ADD (array, i, memcpy,
++				  CPU_FEATURE_USABLE (AVX512VL),
++				  __memcpy_evex_unaligned)
++		      IFUNC_IMPL_ADD (array, i, memcpy,
++				      CPU_FEATURE_USABLE (AVX512VL),
++				      __memcpy_evex_unaligned_erms)
++			  IFUNC_IMPL_ADD (array, i, memcpy,
++					  CPU_FEATURE_USABLE (SSSE3),
++					  __memcpy_ssse3_back)
++			      IFUNC_IMPL_ADD (array, i, memcpy,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __memcpy_ssse3)
++				  IFUNC_IMPL_ADD (
++				      array, i, memcpy,
++				      CPU_FEATURE_USABLE (AVX512F),
++				      __memcpy_avx512_no_vzeroupper)
++				      IFUNC_IMPL_ADD (
++					  array, i, memcpy,
++					  CPU_FEATURE_USABLE (AVX512VL),
++					  __memcpy_avx512_unaligned)
++					  IFUNC_IMPL_ADD (
++					      array, i, memcpy,
++					      CPU_FEATURE_USABLE (AVX512VL),
++					      __memcpy_avx512_unaligned_erms)
++					      IFUNC_IMPL_ADD (
++						  array, i, memcpy, 1,
++						  __memcpy_sse2_unaligned)
++						  IFUNC_IMPL_ADD (
++						      array, i, memcpy, 1,
++						      __memcpy_sse2_unaligned_erms)
++						      IFUNC_IMPL_ADD (
++							  array, i, memcpy, 1,
++							  __memcpy_erms))
+ 
+ #ifdef SHARED
+   /* Support sysdeps/x86_64/multiarch/mempcpy_chk.c.  */
+-  IFUNC_IMPL (i, name, __mempcpy_chk,
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512F),
+-			      __mempcpy_chk_avx512_no_vzeroupper)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __mempcpy_chk_avx512_unaligned)
++  IFUNC_IMPL (
++      i, name, __mempcpy_chk,
++      IFUNC_IMPL_ADD (array, i, __mempcpy_chk, CPU_FEATURE_USABLE (AVX512F),
++		      __mempcpy_chk_avx512_no_vzeroupper)
++	  IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
++			  CPU_FEATURE_USABLE (AVX512VL),
++			  __mempcpy_chk_avx512_unaligned)
+ 	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+ 			      CPU_FEATURE_USABLE (AVX512VL),
+ 			      __mempcpy_chk_avx512_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __mempcpy_chk_avx_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __mempcpy_chk_avx_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __mempcpy_chk_avx_unaligned_rtm)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __mempcpy_chk_avx_unaligned_erms_rtm)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __mempcpy_chk_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __mempcpy_chk_evex_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __mempcpy_chk_ssse3_back)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
+-			      CPU_FEATURE_USABLE (SSSE3),
+-			      __mempcpy_chk_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk, 1,
+-			      __mempcpy_chk_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk, 1,
+-			      __mempcpy_chk_sse2_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, __mempcpy_chk, 1,
+-			      __mempcpy_chk_erms))
++		  IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
++				  CPU_FEATURE_USABLE (AVX),
++				  __mempcpy_chk_avx_unaligned)
++		      IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
++				      CPU_FEATURE_USABLE (AVX),
++				      __mempcpy_chk_avx_unaligned_erms)
++			  IFUNC_IMPL_ADD (array, i, __mempcpy_chk,
++					  (CPU_FEATURE_USABLE (AVX)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __mempcpy_chk_avx_unaligned_rtm)
++			      IFUNC_IMPL_ADD (
++				  array, i, __mempcpy_chk,
++				  (CPU_FEATURE_USABLE (AVX)
++				   && CPU_FEATURE_USABLE (RTM)),
++				  __mempcpy_chk_avx_unaligned_erms_rtm)
++				  IFUNC_IMPL_ADD (
++				      array, i, __mempcpy_chk,
++				      CPU_FEATURE_USABLE (AVX512VL),
++				      __mempcpy_chk_evex_unaligned)
++				      IFUNC_IMPL_ADD (
++					  array, i, __mempcpy_chk,
++					  CPU_FEATURE_USABLE (AVX512VL),
++					  __mempcpy_chk_evex_unaligned_erms)
++					  IFUNC_IMPL_ADD (
++					      array, i, __mempcpy_chk,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __mempcpy_chk_ssse3_back)
++					      IFUNC_IMPL_ADD (
++						  array, i, __mempcpy_chk,
++						  CPU_FEATURE_USABLE (SSSE3),
++						  __mempcpy_chk_ssse3)
++						  IFUNC_IMPL_ADD (
++						      array, i, __mempcpy_chk,
++						      1,
++						      __mempcpy_chk_sse2_unaligned)
++						      IFUNC_IMPL_ADD (
++							  array, i,
++							  __mempcpy_chk, 1,
++							  __mempcpy_chk_sse2_unaligned_erms)
++							  IFUNC_IMPL_ADD (
++							      array, i,
++							      __mempcpy_chk, 1,
++							      __mempcpy_chk_erms))
+ #endif
+ 
+   /* Support sysdeps/x86_64/multiarch/mempcpy.c.  */
+-  IFUNC_IMPL (i, name, mempcpy,
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      CPU_FEATURE_USABLE (AVX512F),
+-			      __mempcpy_avx512_no_vzeroupper)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __mempcpy_avx512_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
++  IFUNC_IMPL (
++      i, name, mempcpy,
++      IFUNC_IMPL_ADD (array, i, mempcpy, CPU_FEATURE_USABLE (AVX512F),
++		      __mempcpy_avx512_no_vzeroupper)
++	  IFUNC_IMPL_ADD (array, i, mempcpy, CPU_FEATURE_USABLE (AVX512VL),
++			  __mempcpy_avx512_unaligned)
++	      IFUNC_IMPL_ADD (array, i, mempcpy, CPU_FEATURE_USABLE (AVX512VL),
+ 			      __mempcpy_avx512_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __mempcpy_avx_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      CPU_FEATURE_USABLE (AVX),
+-			      __mempcpy_avx_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __mempcpy_avx_unaligned_rtm)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      (CPU_FEATURE_USABLE (AVX)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __mempcpy_avx_unaligned_erms_rtm)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __mempcpy_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy,
+-			      CPU_FEATURE_USABLE (AVX512VL),
+-			      __mempcpy_evex_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy, CPU_FEATURE_USABLE (SSSE3),
+-			      __mempcpy_ssse3_back)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy, CPU_FEATURE_USABLE (SSSE3),
+-			      __mempcpy_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy, 1,
+-			      __mempcpy_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy, 1,
+-			      __mempcpy_sse2_unaligned_erms)
+-	      IFUNC_IMPL_ADD (array, i, mempcpy, 1, __mempcpy_erms))
++		  IFUNC_IMPL_ADD (array, i, mempcpy, CPU_FEATURE_USABLE (AVX),
++				  __mempcpy_avx_unaligned)
++		      IFUNC_IMPL_ADD (array, i, mempcpy,
++				      CPU_FEATURE_USABLE (AVX),
++				      __mempcpy_avx_unaligned_erms)
++			  IFUNC_IMPL_ADD (array, i, mempcpy,
++					  (CPU_FEATURE_USABLE (AVX)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __mempcpy_avx_unaligned_rtm)
++			      IFUNC_IMPL_ADD (array, i, mempcpy,
++					      (CPU_FEATURE_USABLE (AVX)
++					       && CPU_FEATURE_USABLE (RTM)),
++					      __mempcpy_avx_unaligned_erms_rtm)
++				  IFUNC_IMPL_ADD (
++				      array, i, mempcpy,
++				      CPU_FEATURE_USABLE (AVX512VL),
++				      __mempcpy_evex_unaligned)
++				      IFUNC_IMPL_ADD (
++					  array, i, mempcpy,
++					  CPU_FEATURE_USABLE (AVX512VL),
++					  __mempcpy_evex_unaligned_erms)
++					  IFUNC_IMPL_ADD (
++					      array, i, mempcpy,
++					      CPU_FEATURE_USABLE (SSSE3),
++					      __mempcpy_ssse3_back)
++					      IFUNC_IMPL_ADD (
++						  array, i, mempcpy,
++						  CPU_FEATURE_USABLE (SSSE3),
++						  __mempcpy_ssse3)
++						  IFUNC_IMPL_ADD (
++						      array, i, mempcpy, 1,
++						      __mempcpy_sse2_unaligned)
++						      IFUNC_IMPL_ADD (
++							  array, i, mempcpy, 1,
++							  __mempcpy_sse2_unaligned_erms)
++							  IFUNC_IMPL_ADD (
++							      array, i,
++							      mempcpy, 1,
++							      __mempcpy_erms))
+ 
+   /* Support sysdeps/x86_64/multiarch/strncmp.c.  */
+-  IFUNC_IMPL (i, name, strncmp,
+-	      IFUNC_IMPL_ADD (array, i, strncmp,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __strncmp_avx2)
+-	      IFUNC_IMPL_ADD (array, i, strncmp,
+-			      (CPU_FEATURE_USABLE (AVX2)
+-			       && CPU_FEATURE_USABLE (RTM)),
+-			      __strncmp_avx2_rtm)
+-	      IFUNC_IMPL_ADD (array, i, strncmp,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)),
+-			      __strncmp_evex)
++  IFUNC_IMPL (
++      i, name, strncmp,
++      IFUNC_IMPL_ADD (
++	  array, i, strncmp, CPU_FEATURE_USABLE (AVX2),
++	  __strncmp_avx2) IFUNC_IMPL_ADD (array, i, strncmp,
++					  (CPU_FEATURE_USABLE (AVX2)
++					   && CPU_FEATURE_USABLE (RTM)),
++					  __strncmp_avx2_rtm)
++	  IFUNC_IMPL_ADD (
++	      array, i, strncmp,
++	      (CPU_FEATURE_USABLE (AVX512VL) && CPU_FEATURE_USABLE (AVX512BW)),
++	      __strncmp_evex)
+ 	      IFUNC_IMPL_ADD (array, i, strncmp, CPU_FEATURE_USABLE (SSE4_2),
+ 			      __strncmp_sse42)
+-	      IFUNC_IMPL_ADD (array, i, strncmp, CPU_FEATURE_USABLE (SSSE3),
+-			      __strncmp_ssse3)
+-	      IFUNC_IMPL_ADD (array, i, strncmp, 1, __strncmp_sse2))
++		  IFUNC_IMPL_ADD (array, i, strncmp,
++				  CPU_FEATURE_USABLE (SSSE3), __strncmp_ssse3)
++		      IFUNC_IMPL_ADD (array, i, strncmp, 1, __strncmp_sse2))
+ 
+ #ifdef SHARED
+   /* Support sysdeps/x86_64/multiarch/wmemset_chk.c.  */
+-  IFUNC_IMPL (i, name, __wmemset_chk,
+-	      IFUNC_IMPL_ADD (array, i, __wmemset_chk, 1,
+-			      __wmemset_chk_sse2_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __wmemset_chk,
+-			      CPU_FEATURE_USABLE (AVX2),
+-			      __wmemset_chk_avx2_unaligned)
++  IFUNC_IMPL (
++      i, name, __wmemset_chk,
++      IFUNC_IMPL_ADD (array, i, __wmemset_chk, 1, __wmemset_chk_sse2_unaligned)
++	  IFUNC_IMPL_ADD (array, i, __wmemset_chk, CPU_FEATURE_USABLE (AVX2),
++			  __wmemset_chk_avx2_unaligned)
+ 	      IFUNC_IMPL_ADD (array, i, __wmemset_chk,
+ 			      (CPU_FEATURE_USABLE (AVX512VL)
+ 			       && CPU_FEATURE_USABLE (AVX512BW)
+ 			       && CPU_FEATURE_USABLE (BMI2)),
+ 			      __wmemset_chk_evex_unaligned)
+-	      IFUNC_IMPL_ADD (array, i, __wmemset_chk,
+-			      (CPU_FEATURE_USABLE (AVX512VL)
+-			       && CPU_FEATURE_USABLE (AVX512BW)
+-			       && CPU_FEATURE_USABLE (BMI2)),
+-			      __wmemset_chk_avx512_unaligned))
++		  IFUNC_IMPL_ADD (array, i, __wmemset_chk,
++				  (CPU_FEATURE_USABLE (AVX512VL)
++				   && CPU_FEATURE_USABLE (AVX512BW)
++				   && CPU_FEATURE_USABLE (BMI2)),
++				  __wmemset_chk_avx512_unaligned))
+ #endif
+ 
+   return i;
+diff --git a/sysdeps/x86_64/multiarch/memcmp-avx2-v0.S b/sysdeps/x86_64/multiarch/memcmp-avx2-v0.S
+new file mode 100644
+index 0000000000..1741a5a8bf
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmp-avx2-v0.S
+@@ -0,0 +1,556 @@
++/* memcmp/wmemcmp optimized with AVX2.
++   Copyright (C) 2017-2022 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, see
++   <https://www.gnu.org/licenses/>.  */
++#if IS_IN (libc)
++
++	/* memcmp/wmemcmp is implemented as: 1. Use ymm vector compares
++	   when possible. The only case where vector compares is not
++	   possible for when size < VEC_SIZE and loading from either s1
++	   or s2 would cause a page cross. 2. For size from 2 to 7
++	   bytes on page cross, load as big endian with movbe and bswap
++	   to avoid branches. 3. Use xmm vector compare when size >= 4
++	   bytes for memcmp or size >= 8 bytes for wmemcmp. 4.
++	   Optimistically compare up to first 4 * VEC_SIZE one at a to
++	   check for early mismatches. Only do this if its guranteed
++	   the work is not wasted. 5. If size is 8 * VEC_SIZE or less,
++	   unroll the loop. 6. Compare 4 * VEC_SIZE at a time with the
++	   aligned first memory area. 7. Use 2 vector compares when
++	   size is 2 * VEC_SIZE or less. 8. Use 4 vector compares when
++	   size is 4 * VEC_SIZE or less. 9. Use 8 vector compares when
++	   size is 8 * VEC_SIZE or less.  */
++
++# include <sysdep.h>
++
++# ifndef MEMCMP
++#  define MEMCMP	__memcmp_avx2_v0
++# endif
++
++# ifdef USE_AS_WMEMCMP
++#  define CHAR_SIZE	4
++#  define VPCMPEQ	vpcmpeqd
++# else
++#  define CHAR_SIZE	1
++#  define VPCMPEQ	vpcmpeqb
++# endif
++
++# ifndef VZEROUPPER
++#  define VZEROUPPER	vzeroupper
++# endif
++
++# define VEC_SIZE	32
++# define PAGE_SIZE	4096
++
++	/* Warning! wmemcmp has to use SIGNED comparison for elements.
++	   memcmp has to use UNSIGNED comparison for elemnts.  */
++
++	.section .text.avx, "ax", @progbits
++ENTRY(MEMCMP)
++# ifdef USE_AS_WMEMCMP
++	shl	$2, %RDX_LP
++# elif defined __ILP32__
++	/* Clear the upper 32 bits.  */
++	movl	%edx, %edx
++# endif
++	cmp	$VEC_SIZE, %RDX_LP
++	jb	L(less_vec)
++
++	/* From VEC to 2 * VEC.  No branch when size == VEC_SIZE.  */
++	vmovdqu	(%rsi), %ymm1
++	VPCMPEQ	(%rdi), %ymm1, %ymm1
++	vpmovmskb %ymm1, %eax
++	/* NB: eax must be destination register if going to
++	   L(return_vec_[0,2]). For L(return_vec_3 destination register
++	   must be ecx.  */
++	incl	%eax
++	jnz	L(return_vec_0)
++
++	cmpq	$(VEC_SIZE * 2), %rdx
++	jbe	L(last_1x_vec)
++
++	/* Check second VEC no matter what.  */
++	vmovdqu	VEC_SIZE(%rsi), %ymm2
++	VPCMPEQ	VEC_SIZE(%rdi), %ymm2, %ymm2
++	vpmovmskb %ymm2, %eax
++	/* If all 4 VEC where equal eax will be all 1s so incl will
++	   overflow and set zero flag.  */
++	incl	%eax
++	jnz	L(return_vec_1)
++
++	/* Less than 4 * VEC.  */
++	cmpq	$(VEC_SIZE * 4), %rdx
++	jbe	L(last_2x_vec)
++
++	/* Check third and fourth VEC no matter what.  */
++	vmovdqu	(VEC_SIZE * 2)(%rsi), %ymm3
++	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %ymm3, %ymm3
++	vpmovmskb %ymm3, %eax
++	incl	%eax
++	jnz	L(return_vec_2)
++	vmovdqu	(VEC_SIZE * 3)(%rsi), %ymm4
++	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %ymm4, %ymm4
++	vpmovmskb %ymm4, %ecx
++	incl	%ecx
++	jnz	L(return_vec_3)
++
++	/* Go to 4x VEC loop.  */
++	cmpq	$(VEC_SIZE * 8), %rdx
++	ja	L(more_8x_vec)
++
++	/* Handle remainder of size = 4 * VEC + 1 to 8 * VEC without any
++	   branches.  */
++
++	/* Load first two VEC from s2 before adjusting addresses.  */
++	vmovdqu	-(VEC_SIZE * 4)(%rsi, %rdx), %ymm1
++	vmovdqu	-(VEC_SIZE * 3)(%rsi, %rdx), %ymm2
++	leaq	-(4 * VEC_SIZE)(%rdi, %rdx), %rdi
++	leaq	-(4 * VEC_SIZE)(%rsi, %rdx), %rsi
++
++	/* Wait to load from s1 until addressed adjust due to
++	   unlamination of microfusion with complex address mode.  */
++	VPCMPEQ	(%rdi), %ymm1, %ymm1
++	VPCMPEQ	(VEC_SIZE)(%rdi), %ymm2, %ymm2
++
++	vmovdqu	(VEC_SIZE * 2)(%rsi), %ymm3
++	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %ymm3, %ymm3
++	vmovdqu	(VEC_SIZE * 3)(%rsi), %ymm4
++	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %ymm4, %ymm4
++
++	/* Reduce VEC0 - VEC4.  */
++	vpand	%ymm1, %ymm2, %ymm5
++	vpand	%ymm3, %ymm4, %ymm6
++	vpand	%ymm5, %ymm6, %ymm7
++	vpmovmskb %ymm7, %ecx
++	incl	%ecx
++	jnz	L(return_vec_0_1_2_3)
++	/* NB: eax must be zero to reach here.  */
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(return_vec_0):
++	tzcntl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else
++	movzbl	(%rsi, %rax), %ecx
++	movzbl	(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif
++L(return_vzeroupper):
++	ZERO_UPPER_VEC_REGISTERS_RETURN
++
++	.p2align 4
++L(return_vec_1):
++	tzcntl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	VEC_SIZE(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	VEC_SIZE(%rsi, %rax), %ecx
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else
++	movzbl	VEC_SIZE(%rsi, %rax), %ecx
++	movzbl	VEC_SIZE(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(return_vec_2):
++	tzcntl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif
++	VZEROUPPER_RETURN
++
++	/* NB: p2align 5 here to ensure 4x loop is 32 byte aligned.  */
++	.p2align 5
++L(8x_return_vec_0_1_2_3):
++	/* Returning from L(more_8x_vec) requires restoring rsi.  */
++	addq	%rdi, %rsi
++L(return_vec_0_1_2_3):
++	vpmovmskb %ymm1, %eax
++	incl	%eax
++	jnz	L(return_vec_0)
++
++	vpmovmskb %ymm2, %eax
++	incl	%eax
++	jnz	L(return_vec_1)
++
++	vpmovmskb %ymm3, %eax
++	incl	%eax
++	jnz	L(return_vec_2)
++L(return_vec_3):
++	tzcntl	%ecx, %ecx
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 3)(%rdi, %rcx), %eax
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 3)(%rsi, %rcx), %eax
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else
++	movzbl	(VEC_SIZE * 3)(%rdi, %rcx), %eax
++	movzbl	(VEC_SIZE * 3)(%rsi, %rcx), %ecx
++	subl	%ecx, %eax
++# endif
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(more_8x_vec):
++	/* Set end of s1 in rdx.  */
++	leaq	-(VEC_SIZE * 4)(%rdi, %rdx), %rdx
++	/* rsi stores s2 - s1. This allows loop to only update one
++	   pointer.  */
++	subq	%rdi, %rsi
++	/* Align s1 pointer.  */
++	andq	$-VEC_SIZE, %rdi
++	/* Adjust because first 4x vec where check already.  */
++	subq	$-(VEC_SIZE * 4), %rdi
++	.p2align 4
++L(loop_4x_vec):
++	/* rsi has s2 - s1 so get correct address by adding s1 (in rdi).
++	 */
++	vmovdqu	(%rsi, %rdi), %ymm1
++	VPCMPEQ	(%rdi), %ymm1, %ymm1
++
++	vmovdqu	VEC_SIZE(%rsi, %rdi), %ymm2
++	VPCMPEQ	VEC_SIZE(%rdi), %ymm2, %ymm2
++
++	vmovdqu	(VEC_SIZE * 2)(%rsi, %rdi), %ymm3
++	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %ymm3, %ymm3
++
++	vmovdqu	(VEC_SIZE * 3)(%rsi, %rdi), %ymm4
++	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %ymm4, %ymm4
++
++	vpand	%ymm1, %ymm2, %ymm5
++	vpand	%ymm3, %ymm4, %ymm6
++	vpand	%ymm5, %ymm6, %ymm7
++	vpmovmskb %ymm7, %ecx
++	incl	%ecx
++	jnz	L(8x_return_vec_0_1_2_3)
++	subq	$-(VEC_SIZE * 4), %rdi
++	/* Check if s1 pointer at end.  */
++	cmpq	%rdx, %rdi
++	jb	L(loop_4x_vec)
++
++	subq	%rdx, %rdi
++	/* rdi has 4 * VEC_SIZE - remaining length.  */
++	cmpl	$(VEC_SIZE * 3), %edi
++	jae	L(8x_last_1x_vec)
++	/* Load regardless of branch.  */
++	vmovdqu	(VEC_SIZE * 2)(%rsi, %rdx), %ymm3
++	cmpl	$(VEC_SIZE * 2), %edi
++	jae	L(8x_last_2x_vec)
++
++	/* Check last 4 VEC.  */
++	vmovdqu	(%rsi, %rdx), %ymm1
++	VPCMPEQ	(%rdx), %ymm1, %ymm1
++
++	vmovdqu	VEC_SIZE(%rsi, %rdx), %ymm2
++	VPCMPEQ	VEC_SIZE(%rdx), %ymm2, %ymm2
++
++	VPCMPEQ	(VEC_SIZE * 2)(%rdx), %ymm3, %ymm3
++
++	vmovdqu	(VEC_SIZE * 3)(%rsi, %rdx), %ymm4
++	VPCMPEQ	(VEC_SIZE * 3)(%rdx), %ymm4, %ymm4
++
++	vpand	%ymm1, %ymm2, %ymm5
++	vpand	%ymm3, %ymm4, %ymm6
++	vpand	%ymm5, %ymm6, %ymm7
++	vpmovmskb %ymm7, %ecx
++	/* Restore s1 pointer to rdi.  */
++	movq	%rdx, %rdi
++	incl	%ecx
++	jnz	L(8x_return_vec_0_1_2_3)
++	/* NB: eax must be zero to reach here.  */
++	VZEROUPPER_RETURN
++
++	/* Only entry is from L(more_8x_vec).  */
++	.p2align 4
++L(8x_last_2x_vec):
++	/* Check second to last VEC. rdx store end pointer of s1 and
++	   ymm3 has already been loaded with second to last VEC from
++	   s2.  */
++	VPCMPEQ	(VEC_SIZE * 2)(%rdx), %ymm3, %ymm3
++	vpmovmskb %ymm3, %eax
++	incl	%eax
++	jnz	L(8x_return_vec_2)
++	/* Check last VEC.  */
++	.p2align 4
++L(8x_last_1x_vec):
++	vmovdqu	(VEC_SIZE * 3)(%rsi, %rdx), %ymm4
++	VPCMPEQ	(VEC_SIZE * 3)(%rdx), %ymm4, %ymm4
++	vpmovmskb %ymm4, %eax
++	incl	%eax
++	jnz	L(8x_return_vec_3)
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(last_2x_vec):
++	/* Check second to last VEC.  */
++	vmovdqu	-(VEC_SIZE * 2)(%rsi, %rdx), %ymm1
++	VPCMPEQ	-(VEC_SIZE * 2)(%rdi, %rdx), %ymm1, %ymm1
++	vpmovmskb %ymm1, %eax
++	incl	%eax
++	jnz	L(return_vec_1_end)
++	/* Check last VEC.  */
++L(last_1x_vec):
++	vmovdqu	-(VEC_SIZE * 1)(%rsi, %rdx), %ymm1
++	VPCMPEQ	-(VEC_SIZE * 1)(%rdi, %rdx), %ymm1, %ymm1
++	vpmovmskb %ymm1, %eax
++	incl	%eax
++	jnz	L(return_vec_0_end)
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(8x_return_vec_2):
++	subq	$VEC_SIZE, %rdx
++L(8x_return_vec_3):
++	tzcntl	%eax, %eax
++	addq	%rdx, %rax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 3)(%rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 3)(%rsi, %rax), %ecx
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else
++	movzbl	(VEC_SIZE * 3)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 3)(%rax), %eax
++	subl	%ecx, %eax
++# endif
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(return_vec_1_end):
++	tzcntl	%eax, %eax
++	addl	%edx, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	-(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	-(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else
++	movzbl	-(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	-(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(return_vec_0_end):
++	tzcntl	%eax, %eax
++	addl	%edx, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	-VEC_SIZE(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	-VEC_SIZE(%rsi, %rax), %ecx
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else
++	movzbl	-VEC_SIZE(%rsi, %rax), %ecx
++	movzbl	-VEC_SIZE(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(less_vec):
++	/* Check if one or less CHAR. This is necessary for size = 0 but
++	   is also faster for size = CHAR_SIZE.  */
++	cmpl	$CHAR_SIZE, %edx
++	jbe	L(one_or_less)
++
++	/* Check if loading one VEC from either s1 or s2 could cause a
++	   page cross. This can have false positives but is by far the
++	   fastest method.  */
++	movl	%edi, %eax
++	orl	%esi, %eax
++	andl	$(PAGE_SIZE - 1), %eax
++	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
++	jg	L(page_cross_less_vec)
++
++	/* No page cross possible.  */
++	vmovdqu	(%rsi), %ymm2
++	VPCMPEQ	(%rdi), %ymm2, %ymm2
++	vpmovmskb %ymm2, %eax
++	incl	%eax
++	/* Result will be zero if s1 and s2 match. Otherwise first set
++	   bit will be first mismatch.  */
++	bzhil	%edx, %eax, %edx
++	jnz	L(return_vec_0)
++	xorl	%eax, %eax
++	VZEROUPPER_RETURN
++
++	.p2align 4
++L(page_cross_less_vec):
++	/* if USE_AS_WMEMCMP it can only be 0, 4, 8, 12, 16, 20, 24, 28
++	   bytes.  */
++	cmpl	$16, %edx
++	jae	L(between_16_31)
++# ifndef USE_AS_WMEMCMP
++	cmpl	$8, %edx
++	jae	L(between_8_15)
++	cmpl	$4, %edx
++	jb	L(between_2_3)
++
++	movbe	(%rdi), %eax
++	movbe	(%rsi), %ecx
++	shlq	$32, %rax
++	shlq	$32, %rcx
++	movbe	-4(%rdi, %rdx), %edi
++	movbe	-4(%rsi, %rdx), %esi
++	orq	%rdi, %rax
++	orq	%rsi, %rcx
++	subq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	/* No ymm register was touched.  */
++	ret
++
++	.p2align 4
++L(one_or_less):
++	jb	L(zero)
++	movzbl	(%rsi), %ecx
++	movzbl	(%rdi), %eax
++	subl	%ecx, %eax
++	/* No ymm register was touched.  */
++	ret
++
++	.p2align 4,, 5
++L(ret_nonzero):
++	sbbl	%eax, %eax
++	orl	$1, %eax
++	ret
++
++	.p2align 4,, 2
++L(zero):
++	xorl	%eax, %eax
++	ret
++
++
++	.p2align 4
++L(between_8_15):
++
++	/* If USE_AS_WMEMCMP fall through into 8-15 byte case.  */
++	movbe	(%rdi), %rax
++	movbe	(%rsi), %rcx
++	subq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	movbe	-8(%rdi, %rdx), %rax
++	movbe	-8(%rsi, %rdx), %rcx
++	subq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	ret
++# else
++	/* If USE_AS_WMEMCMP fall through into 8-15 byte case.  */
++	vmovq	(%rdi), %xmm1
++	vmovq	(%rsi), %xmm2
++	VPCMPEQ	%xmm1, %xmm2, %xmm2
++	vpmovmskb %xmm2, %eax
++	subl	$0xffff, %eax
++	jnz	L(return_vec_0)
++	/* Use overlapping loads to avoid branches.  */
++	leaq	-8(%rdi, %rdx), %rdi
++	leaq	-8(%rsi, %rdx), %rsi
++	vmovq	(%rdi), %xmm1
++	vmovq	(%rsi), %xmm2
++	VPCMPEQ	%xmm1, %xmm2, %xmm2
++	vpmovmskb %xmm2, %eax
++	subl	$0xffff, %eax
++	jnz	L(return_vec_0)
++	/* No ymm register was touched.  */
++	ret
++# endif
++
++	.p2align 4,, 10
++L(between_16_31):
++	/* From 16 to 31 bytes.  No branch when size == 16.  */
++	vmovdqu	(%rsi), %xmm2
++	VPCMPEQ	(%rdi), %xmm2, %xmm2
++	vpmovmskb %xmm2, %eax
++	subl	$0xffff, %eax
++	jnz	L(return_vec_0)
++
++	/* Use overlapping loads to avoid branches.  */
++
++	vmovdqu	-16(%rsi, %rdx), %xmm2
++	leaq	-16(%rdi, %rdx), %rdi
++	leaq	-16(%rsi, %rdx), %rsi
++	VPCMPEQ	(%rdi), %xmm2, %xmm2
++	vpmovmskb %xmm2, %eax
++	subl	$0xffff, %eax
++	jnz	L(return_vec_0)
++	/* No ymm register was touched.  */
++	ret
++
++# ifdef USE_AS_WMEMCMP
++	.p2align 4,, 2
++L(zero):
++	xorl	%eax, %eax
++	ret
++
++
++	.p2align 4
++L(one_or_less):
++	jb	L(zero)
++	movl	(%rdi), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi), %ecx
++	je	L(zero)
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++	/* No ymm register was touched.  */
++	ret
++# else
++
++	.p2align 4
++L(between_2_3):
++	/* Load as big endian with overlapping movbe to avoid branches.
++	 */
++	/* Load as big endian to avoid branches.  */
++	movzwl	(%rdi), %eax
++	movzwl	(%rsi), %ecx
++	bswap	%eax
++	bswap	%ecx
++	shrl	%eax
++	shrl	%ecx
++	movzbl	-1(%rdi, %rdx), %edi
++	movzbl	-1(%rsi, %rdx), %esi
++	orl	%edi, %eax
++	orl	%esi, %ecx
++	/* Subtraction is okay because the upper 8 bits are zero.  */
++	subl	%ecx, %eax
++	/* No ymm register was touched.  */
++	ret
++# endif
++
++END(MEMCMP)
++#endif
+diff --git a/sysdeps/x86_64/multiarch/memcmp-sse2-v0.S b/sysdeps/x86_64/multiarch/memcmp-sse2-v0.S
+new file mode 100644
+index 0000000000..ea6f54f7ca
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmp-sse2-v0.S
+@@ -0,0 +1,528 @@
++#include <sysdep.h>
++
++#ifdef USE_AS_WMEMCMP
++# define PCMPEQ	pcmpeqd
++# define CHAR_SIZE	4
++# define SIZE_OFFSET	(0)
++#else	/* !USE_AS_WMEMCMP */
++# define PCMPEQ	pcmpeqb
++# define CHAR_SIZE	1
++#endif	/* !USE_AS_WMEMCMP */
++
++#ifdef USE_AS_MEMCMPEQ
++# define SIZE_OFFSET	(0)
++# define CHECK_CMP(x, y)	subl x, y
++#else	/* !USE_AS_MEMCMPEQ */
++# ifndef SIZE_OFFSET
++#  define SIZE_OFFSET	(CHAR_PER_VEC * 2)
++# endif	/* !SIZE_OFFSET */
++# define CHECK_CMP(x, y)	cmpl x, y
++#endif	/* !USE_AS_MEMCMPEQ */
++
++#define VEC_SIZE	16
++#define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
++
++#ifndef MEMCMP
++# define MEMCMP	__memcmp_sse2_v0
++#endif
++
++ENTRY(MEMCMP)
++#ifdef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* USE_AS_WMEMCMP */
++	cmpq	$CHAR_PER_VEC, %rdx
++	ja	L(more_1x_vec)
++
++#ifdef USE_AS_WMEMCMP
++	decl	%edx
++	jle	L(cmp_0_1)
++
++	movq	(%rsi), %xmm0
++	movq	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++	movq	-4(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movq	-4(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_end_0_add8)
++#else	/* !USE_AS_WMEMCMP */
++	cmpl	$8, %edx
++	ja	L(cmp_9_16)
++
++	cmpl	$4, %edx
++	jb	L(cmp_0_3)
++
++
++# ifdef USE_AS_MEMCMPEQ
++	movl	(%rsi), %eax
++	subl	(%rdi), %eax
++
++	movl	-4(%rsi, %rdx), %esi
++	subl	-4(%rdi, %rdx), %esi
++
++	orl	%esi, %eax
++	ret
++# else	/* !USE_AS_MEMCMPEQ */
++	/* Load registers we need to shift first.  */
++	movl	-4(%rsi, %rdx), %ecx
++	movl	-4(%rdi, %rdx), %eax
++	shlq	$32, %rcx
++	shlq	$32, %rax
++	movl	(%rsi), %esi
++	movl	(%rdi), %edi
++	orq	%rsi, %rcx
++	orq	%rdi, %rax
++
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4,, 10
++L(cmp_9_16):
++
++# ifdef USE_AS_MEMCMPEQ
++	movq	(%rsi), %rax
++	subq	(%rdi), %rax
++
++	movq	-8(%rsi, %rdx), %rcx
++	subq	-8(%rdi, %rdx), %rcx
++	orq	%rcx, %rax
++	/* Convert 64 bit -> 32 bit boolean.  */
++	setnz	%cl
++	movzbl	%cl, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	movq	(%rsi), %rcx
++	movq	(%rdi), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++
++	movq	-8(%rsi, %rdx, CHAR_SIZE), %rcx
++	movq	-8(%rdi, %rdx, CHAR_SIZE), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4,, 8
++L(cmp_0_1):
++	jne	L(cmp_0_0)
++#ifdef USE_AS_WMEMCMP
++	movl	(%rdi), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi), %ecx
++	je	L(cmp_0_0)
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++#else	/* !USE_AS_WMEMCMP */
++	movzbl	(%rdi), %eax
++	movzbl	(%rsi), %ecx
++	subl	%ecx, %eax
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++L(cmp_0_0):
++	xorl	%eax, %eax
++	ret
++
++#ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movl	(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++	ret
++
++#else	/* !USE_AS_WMEMCMP */
++
++# ifndef USE_AS_MEMCMPEQ
++	.p2align 4,, 14
++L(ret_nonzero):
++	bswapq	%rcx
++	bswapq	%rax
++	subq	%rcx, %rax
++	sbbl	%eax, %eax
++	orl	$1, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(cmp_0_3):
++# ifdef USE_AS_MEMCMPEQ
++	/* No reason to add to dependency chain on rdx. Saving a the
++	   bytes here doesn't change number of fetch blocks.  */
++	cmpl	$1, %edx
++	jbe	L(cmp_0_1)
++# else	/* !USE_AS_MEMCMPEQ */
++	/* We need the code size to prevent taking an extra fetch block.
++	 */
++	decl	%edx
++	jle	L(cmp_0_1)
++# endif	/* !USE_AS_MEMCMPEQ */
++	movzwl	(%rsi), %ecx
++	movzwl	(%rdi), %eax
++
++# ifdef USE_AS_MEMCMPEQ
++	subl	%ecx, %eax
++
++	movzbl	-1(%rsi, %rdx), %esi
++	movzbl	-1(%rdi, %rdx), %edi
++	subl	%edi, %esi
++	orl	%esi, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	bswapl	%ecx
++	bswapl	%eax
++
++	/* Implicit right shift by one. We just need to displace the
++	   sign bits.  */
++	shrl	%ecx
++	shrl	%eax
++
++	/* Eat a partial register stall here. Saves code size. On SnB+
++	   this is likely worth it as the merging uop ~= cost of 2x
++	   ALU.  */
++	movb	(%rsi, %rdx), %cl
++	movzbl	(%rdi, %rdx), %edi
++	orl	%edi, %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++	ret
++#endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 5
++L(more_1x_vec):
++#ifndef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* !USE_AS_WMEMCMP */
++	movups	(%rsi), %xmm0
++	movups	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++#if SIZE_OFFSET == 0
++	cmpq	$(CHAR_PER_VEC * 2), %rdx
++#else	/* !SIZE_OFFSET == 0 */
++	subq	$(CHAR_PER_VEC * 2), %rdx
++#endif	/* !SIZE_OFFSET == 0 */
++	ja	L(more_2x_vec)
++
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++#ifndef USE_AS_MEMCMPEQ
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	jnz	L(ret_nonzero_vec_end_0)
++#else	/* USE_AS_MEMCMPEQ */
++L(ret_nonzero_vec_start_2_3):
++L(ret_nonzero_vec_start_4_5):
++L(ret_nonzero_vec_start_1):
++L(ret_nonzero_vec_start_0):
++L(ret_nonzero_vec_end_0):
++#endif	/* USE_AS_MEMCMPEQ */
++	ret
++
++#ifndef USE_AS_MEMCMPEQ
++# ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_end_0_add8):
++	addl	$3, %edx
++# else	/* !USE_AS_WMEMCMP */
++	.p2align 4,, 8
++# endif	/* !USE_AS_WMEMCMP */
++L(ret_nonzero_vec_end_0):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++# ifndef USE_AS_WMEMCMP
++	.p2align 4,, 10
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movzbl	(%rsi, %rax), %ecx
++	movzbl	(%rdi, %rax), %eax
++	subl	%ecx, %eax
++	ret
++# endif	/* !USE_AS_WMEMCMP */
++#else	/* USE_AS_MEMCMPEQ */
++
++
++
++#endif	/* USE_AS_MEMCMPEQ */
++
++	.p2align 5
++L(more_2x_vec):
++	movups	(VEC_SIZE * 1)(%rsi), %xmm0
++	movups	(VEC_SIZE * 1)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_1)
++
++	cmpq	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %rdx
++	jbe	L(last_2x_vec)
++
++	cmpq	$(CHAR_PER_VEC * 8 - SIZE_OFFSET), %rdx
++	ja	L(more_8x_vec)
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++
++	cmpl	$(CHAR_PER_VEC * 6 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm0
++	movups	(VEC_SIZE * 4)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 5)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++#ifdef USE_AS_MEMCMPEQ
++	jz	L(last_2x_vec)
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_start_4_5)
++#endif	/* !USE_AS_MEMCMPEQ */
++	.p2align 4
++L(last_2x_vec):
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_end_1):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4
++L(ret_nonzero_vec_start_4_5):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 4)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 4)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_start_1):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 1)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 1)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_8x_vec):
++	subq	%rdi, %rsi
++	leaq	(VEC_SIZE * -6 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %rdx
++	andq	$(VEC_SIZE * -1), %rdi
++	addq	%rdi, %rsi
++	.p2align 4
++L(loop_4x):
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 3)(%rsi), %xmm1
++
++	PCMPEQ	(VEC_SIZE * 2)(%rdi), %xmm0
++	PCMPEQ	(VEC_SIZE * 3)(%rdi), %xmm1
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rsi), %xmm3
++
++	PCMPEQ	(VEC_SIZE * 4)(%rdi), %xmm2
++	PCMPEQ	(VEC_SIZE * 5)(%rdi), %xmm3
++
++	pand	%xmm0, %xmm1
++	pand	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_loop)
++
++	addq	$(VEC_SIZE * 4), %rdi
++	addq	$(VEC_SIZE * 4), %rsi
++	cmpq	%rdi, %rdx
++	ja	L(loop_4x)
++	subl	%edi, %edx
++	addl	$(VEC_SIZE * 6 - SIZE_OFFSET), %edx
++#ifdef USE_AS_WMEMCMP
++	shrl	$2, %edx
++#endif	/* USE_AS_WMEMCMP */
++	cmpl	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jz	L(last_2x_vec)
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_loop):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(ret_nonzero_vec_start_2_3):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++	/* L(loop_ret_nonzero) and L(loop_tail_end) must be positioned
++	   so that jumps from within L(loop_0x0) can get 2-byte
++	   encoding. Otherwise the jump table with be incorrect.  */
++	.p2align 4
++L(ret_nonzero_loop):
++	pmovmskb %xmm0, %ecx
++	pmovmskb %xmm1, %edx
++	sall	$(VEC_SIZE * 1), %edx
++	leal	1(%rcx, %rdx), %edx
++	pmovmskb %xmm2, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++
++	salq	$32, %rax
++	orq	%rdx, %rax
++
++	bsfq	%rax, %rax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++END(MEMCMP)
+diff --git a/sysdeps/x86_64/multiarch/memcmp-sse2-v1.S b/sysdeps/x86_64/multiarch/memcmp-sse2-v1.S
+new file mode 100644
+index 0000000000..348a51cda7
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmp-sse2-v1.S
+@@ -0,0 +1,527 @@
++#include <sysdep.h>
++
++#ifdef USE_AS_WMEMCMP
++# define PCMPEQ	pcmpeqd
++# define CHAR_SIZE	4
++# define SIZE_OFFSET	(0)
++#else	/* !USE_AS_WMEMCMP */
++# define PCMPEQ	pcmpeqb
++# define CHAR_SIZE	1
++#endif	/* !USE_AS_WMEMCMP */
++
++#ifdef USE_AS_MEMCMPEQ
++# define SIZE_OFFSET	(0)
++# define CHECK_CMP(x, y)	subl x, y
++#else	/* !USE_AS_MEMCMPEQ */
++# ifndef SIZE_OFFSET
++#  define SIZE_OFFSET	(CHAR_PER_VEC * 2)
++# endif	/* !SIZE_OFFSET */
++# define CHECK_CMP(x, y)	cmpl x, y
++#endif	/* !USE_AS_MEMCMPEQ */
++
++#define VEC_SIZE	16
++#define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
++
++#ifndef MEMCMP
++# define MEMCMP	__memcmp_sse2_v1
++#endif
++
++ENTRY(MEMCMP)
++#ifdef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* USE_AS_WMEMCMP */
++	cmpq	$CHAR_PER_VEC, %rdx
++	ja	L(more_1x_vec)
++
++#ifdef USE_AS_WMEMCMP
++	decl	%edx
++	jle	L(cmp_0_1)
++
++	movq	(%rsi), %xmm0
++	movq	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++	movq	-4(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movq	-4(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_end_0_add8)
++#else	/* !USE_AS_WMEMCMP */
++	cmpl	$8, %edx
++	ja	L(cmp_9_16)
++
++	cmpl	$4, %edx
++	jb	L(cmp_0_3)
++
++
++# ifdef USE_AS_MEMCMPEQ
++	movl	(%rsi), %eax
++	subl	(%rdi), %eax
++
++	movl	-4(%rsi, %rdx), %esi
++	subl	-4(%rdi, %rdx), %esi
++
++	orl	%esi, %eax
++	ret
++# else	/* !USE_AS_MEMCMPEQ */
++	/* Load registers we need to shift first.  */
++	movl	-4(%rsi, %rdx), %ecx
++	movl	-4(%rdi, %rdx), %eax
++	shlq	$32, %rcx
++	shlq	$32, %rax
++	movl	(%rsi), %esi
++	movl	(%rdi), %edi
++	orq	%rsi, %rcx
++	orq	%rdi, %rax
++
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4,, 10
++L(cmp_9_16):
++
++# ifdef USE_AS_MEMCMPEQ
++	movq	(%rsi), %rax
++	subq	(%rdi), %rax
++
++	movq	-8(%rsi, %rdx), %rcx
++	subq	-8(%rdi, %rdx), %rcx
++	orq	%rcx, %rax
++	/* Convert 64 bit -> 32 bit boolean.  */
++	setnz	%cl
++	movzbl	%cl, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	movq	(%rsi), %rcx
++	movq	(%rdi), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++
++	movq	-8(%rsi, %rdx, CHAR_SIZE), %rcx
++	movq	-8(%rdi, %rdx, CHAR_SIZE), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4,, 8
++L(cmp_0_1):
++	jne	L(cmp_0_0)
++#ifdef USE_AS_WMEMCMP
++	movl	(%rdi), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi), %ecx
++	je	L(cmp_0_0)
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++#else	/* !USE_AS_WMEMCMP */
++	movzbl	(%rdi), %eax
++	movzbl	(%rsi), %ecx
++	subl	%ecx, %eax
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++L(cmp_0_0):
++	xorl	%eax, %eax
++	ret
++
++#ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movl	(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++	ret
++
++#else	/* !USE_AS_WMEMCMP */
++
++# ifndef USE_AS_MEMCMPEQ
++	.p2align 4,, 14
++L(ret_nonzero):
++	bswapq	%rcx
++	bswapq	%rax
++	subq	%rcx, %rax
++	sbbl	%eax, %eax
++	orl	$1, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(cmp_0_3):
++# ifdef USE_AS_MEMCMPEQ
++	/* No reason to add to dependency chain on rdx. Saving a the
++	   bytes here doesn't change number of fetch blocks.  */
++	cmpl	$1, %edx
++	jbe	L(cmp_0_1)
++# else	/* !USE_AS_MEMCMPEQ */
++	/* We need the code size to prevent taking an extra fetch block.
++	 */
++	decl	%edx
++	jle	L(cmp_0_1)
++# endif	/* !USE_AS_MEMCMPEQ */
++	movzwl	(%rsi), %ecx
++	movzwl	(%rdi), %eax
++
++# ifdef USE_AS_MEMCMPEQ
++	subl	%ecx, %eax
++
++	movzbl	-1(%rsi, %rdx), %esi
++	movzbl	-1(%rdi, %rdx), %edi
++	subl	%edi, %esi
++	orl	%esi, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	bswapl	%ecx
++	bswapl	%eax
++
++	/* Implicit right shift by one. We just need to displace the
++	   sign bits.  */
++	shrl	%ecx
++	shrl	%eax
++
++	/* Eat a partial register stall here. Saves code size. On SnB+
++	   this is likely worth it as the merging uop ~= cost of 2x
++	   ALU.  */
++	movb	(%rsi, %rdx), %cl
++	movzbl	(%rdi, %rdx), %edi
++	orl	%edi, %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++	ret
++#endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 5
++L(more_1x_vec):
++#ifndef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* !USE_AS_WMEMCMP */
++	movups	(%rsi), %xmm0
++	movups	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++#if SIZE_OFFSET == 0
++	cmpq	$(CHAR_PER_VEC * 2), %rdx
++#else	/* !SIZE_OFFSET == 0 */
++	subq	$(CHAR_PER_VEC * 2), %rdx
++#endif	/* !SIZE_OFFSET == 0 */
++	ja	L(more_2x_vec)
++
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++#ifndef USE_AS_MEMCMPEQ
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	jnz	L(ret_nonzero_vec_end_0)
++#else	/* USE_AS_MEMCMPEQ */
++L(ret_nonzero_vec_start_1):
++L(ret_nonzero_vec_start_0):
++L(ret_nonzero_vec_end_0):
++#endif	/* USE_AS_MEMCMPEQ */
++	ret
++
++#ifndef USE_AS_MEMCMPEQ
++# ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_end_0_add8):
++	addl	$3, %edx
++# else	/* !USE_AS_WMEMCMP */
++	.p2align 4,, 8
++# endif	/* !USE_AS_WMEMCMP */
++L(ret_nonzero_vec_end_0):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++# ifndef USE_AS_WMEMCMP
++	.p2align 4,, 10
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movzbl	(%rsi, %rax), %ecx
++	movzbl	(%rdi, %rax), %eax
++	subl	%ecx, %eax
++	ret
++# endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_start_1):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 1)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 1)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_2x_vec):
++	movups	(VEC_SIZE * 1)(%rsi), %xmm0
++	movups	(VEC_SIZE * 1)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_1)
++
++	cmpq	$(CHAR_PER_VEC * 8 - SIZE_OFFSET), %rdx
++	ja	L(more_8x_vec)
++
++	cmpl	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++
++	cmpl	$(CHAR_PER_VEC * 6 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm0
++	movups	(VEC_SIZE * 4)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 5)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++#ifdef USE_AS_MEMCMPEQ
++	jz	L(last_2x_vec)
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_start_4_5)
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(last_2x_vec):
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_vec_start_2_3):
++L(ret_nonzero_vec_start_4_5):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_end_1):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4
++L(ret_nonzero_vec_start_2_3):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++	.p2align 4
++L(ret_nonzero_vec_start_4_5):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 4)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 4)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_8x_vec):
++	subq	%rdi, %rsi
++	leaq	(VEC_SIZE * -6 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %rdx
++	andq	$(VEC_SIZE * -1), %rdi
++	addq	%rdi, %rsi
++	.p2align 4
++L(loop_4x):
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 3)(%rsi), %xmm1
++
++	PCMPEQ	(VEC_SIZE * 2)(%rdi), %xmm0
++	PCMPEQ	(VEC_SIZE * 3)(%rdi), %xmm1
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rsi), %xmm3
++
++	PCMPEQ	(VEC_SIZE * 4)(%rdi), %xmm2
++	PCMPEQ	(VEC_SIZE * 5)(%rdi), %xmm3
++
++	pand	%xmm0, %xmm1
++	pand	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_loop)
++
++	addq	$(VEC_SIZE * 4), %rdi
++	addq	$(VEC_SIZE * 4), %rsi
++	cmpq	%rdi, %rdx
++	ja	L(loop_4x)
++	subl	%edi, %edx
++	addl	$(VEC_SIZE * 6 - SIZE_OFFSET), %edx
++#ifdef USE_AS_WMEMCMP
++	shrl	$2, %edx
++#endif	/* USE_AS_WMEMCMP */
++	cmpl	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jz	L(last_2x_vec)
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_loop):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jmp	L(ret_nonzero_vec_start_2_3)
++
++	/* L(loop_ret_nonzero) and L(loop_tail_end) must be positioned
++	   so that jumps from within L(loop_0x0) can get 2-byte
++	   encoding. Otherwise the jump table with be incorrect.  */
++	.p2align 4
++L(ret_nonzero_loop):
++	pmovmskb %xmm0, %ecx
++	pmovmskb %xmm1, %edx
++	sall	$(VEC_SIZE * 1), %edx
++	leal	1(%rcx, %rdx), %edx
++	pmovmskb %xmm2, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++
++	salq	$32, %rax
++	orq	%rdx, %rax
++
++	bsfq	%rax, %rax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++END(MEMCMP)
+diff --git a/sysdeps/x86_64/multiarch/memcmp-sse2-v2.S b/sysdeps/x86_64/multiarch/memcmp-sse2-v2.S
+new file mode 100644
+index 0000000000..5d3ee3846a
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmp-sse2-v2.S
+@@ -0,0 +1,547 @@
++#include <sysdep.h>
++
++#ifdef USE_AS_WMEMCMP
++# define PCMPEQ	pcmpeqd
++# define CHAR_SIZE	4
++# define SIZE_OFFSET	(0)
++#else	/* !USE_AS_WMEMCMP */
++# define PCMPEQ	pcmpeqb
++# define CHAR_SIZE	1
++#endif	/* !USE_AS_WMEMCMP */
++
++#ifdef USE_AS_MEMCMPEQ
++# define SIZE_OFFSET	(0)
++# define CHECK_CMP(x, y)	subl x, y
++#else	/* !USE_AS_MEMCMPEQ */
++# ifndef SIZE_OFFSET
++#  define SIZE_OFFSET	(CHAR_PER_VEC * 2)
++# endif	/* !SIZE_OFFSET */
++# define CHECK_CMP(x, y)	cmpl x, y
++#endif	/* !USE_AS_MEMCMPEQ */
++
++#define VEC_SIZE	16
++#define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
++
++#ifndef MEMCMP
++# define MEMCMP	__memcmp_sse2_v2
++#endif
++
++ENTRY(MEMCMP)
++#ifdef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* USE_AS_WMEMCMP */
++	cmpq	$CHAR_PER_VEC, %rdx
++	ja	L(more_1x_vec)
++
++#ifdef USE_AS_WMEMCMP
++	decl	%edx
++	jle	L(cmp_0_1)
++
++	movq	(%rsi), %xmm0
++	movq	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++	movq	-4(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movq	-4(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_end_0_add8)
++#else	/* !USE_AS_WMEMCMP */
++	cmpl	$8, %edx
++	ja	L(cmp_9_16)
++
++	cmpl	$4, %edx
++	jb	L(cmp_0_3)
++
++
++# ifdef USE_AS_MEMCMPEQ
++	movl	(%rsi), %eax
++	subl	(%rdi), %eax
++
++	movl	-4(%rsi, %rdx), %esi
++	subl	-4(%rdi, %rdx), %esi
++
++	orl	%esi, %eax
++	ret
++# else	/* !USE_AS_MEMCMPEQ */
++	/* Load registers we need to shift first.  */
++	movl	-4(%rsi, %rdx), %ecx
++	movl	-4(%rdi, %rdx), %eax
++	shlq	$32, %rcx
++	shlq	$32, %rax
++	movl	(%rsi), %esi
++	movl	(%rdi), %edi
++	orq	%rsi, %rcx
++	orq	%rdi, %rax
++
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4,, 10
++L(cmp_9_16):
++
++# ifdef USE_AS_MEMCMPEQ
++	movq	(%rsi), %rax
++	subq	(%rdi), %rax
++
++	movq	-8(%rsi, %rdx), %rcx
++	subq	-8(%rdi, %rdx), %rcx
++	orq	%rcx, %rax
++	/* Convert 64 bit -> 32 bit boolean.  */
++	setnz	%cl
++	movzbl	%cl, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	movq	(%rsi), %rcx
++	movq	(%rdi), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++
++	movq	-8(%rsi, %rdx, CHAR_SIZE), %rcx
++	movq	-8(%rdi, %rdx, CHAR_SIZE), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4,, 8
++L(cmp_0_1):
++	jne	L(cmp_0_0)
++#ifdef USE_AS_WMEMCMP
++	movl	(%rdi), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi), %ecx
++	je	L(cmp_0_0)
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++#else	/* !USE_AS_WMEMCMP */
++	movzbl	(%rdi), %eax
++	movzbl	(%rsi), %ecx
++	subl	%ecx, %eax
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++L(cmp_0_0):
++	xorl	%eax, %eax
++	ret
++
++#ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movl	(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++	ret
++
++#else	/* !USE_AS_WMEMCMP */
++
++# ifndef USE_AS_MEMCMPEQ
++	.p2align 4,, 14
++L(ret_nonzero):
++	bswapq	%rcx
++	bswapq	%rax
++	subq	%rcx, %rax
++	sbbl	%eax, %eax
++	orl	$1, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(cmp_0_3):
++# ifdef USE_AS_MEMCMPEQ
++	/* No reason to add to dependency chain on rdx. Saving a the
++	   bytes here doesn't change number of fetch blocks.  */
++	cmpl	$1, %edx
++	jbe	L(cmp_0_1)
++# else	/* !USE_AS_MEMCMPEQ */
++	/* We need the code size to prevent taking an extra fetch block.
++	 */
++	decl	%edx
++	jle	L(cmp_0_1)
++# endif	/* !USE_AS_MEMCMPEQ */
++	movzwl	(%rsi), %ecx
++	movzwl	(%rdi), %eax
++
++# ifdef USE_AS_MEMCMPEQ
++	subl	%ecx, %eax
++
++	movzbl	-1(%rsi, %rdx), %esi
++	movzbl	-1(%rdi, %rdx), %edi
++	subl	%edi, %esi
++	orl	%esi, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	bswapl	%ecx
++	bswapl	%eax
++
++	/* Implicit right shift by one. We just need to displace the
++	   sign bits.  */
++	shrl	%ecx
++	shrl	%eax
++
++	/* Eat a partial register stall here. Saves code size. On SnB+
++	   this is likely worth it as the merging uop ~= cost of 2x
++	   ALU.  */
++	movb	(%rsi, %rdx), %cl
++	movzbl	(%rdi, %rdx), %edi
++	orl	%edi, %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++	ret
++#endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 5
++L(more_1x_vec):
++#ifndef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* !USE_AS_WMEMCMP */
++	movups	(%rsi), %xmm0
++	movups	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++#if SIZE_OFFSET == 0
++	cmpq	$(CHAR_PER_VEC * 2), %rdx
++#else	/* !SIZE_OFFSET == 0 */
++	subq	$(CHAR_PER_VEC * 2), %rdx
++#endif	/* !SIZE_OFFSET == 0 */
++	ja	L(more_2x_vec)
++
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++#ifndef USE_AS_MEMCMPEQ
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	jnz	L(ret_nonzero_vec_end_0)
++#else	/* USE_AS_MEMCMPEQ */
++L(ret_nonzero_vec_start_1):
++L(ret_nonzero_vec_start_0):
++L(ret_nonzero_vec_end_0):
++#endif	/* USE_AS_MEMCMPEQ */
++	ret
++
++
++#ifndef USE_AS_MEMCMPEQ
++# ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_end_0_add8):
++	addl	$3, %edx
++# else	/* !USE_AS_WMEMCMP */
++	.p2align 4,, 8
++# endif	/* !USE_AS_WMEMCMP */
++L(ret_nonzero_vec_end_0):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++# ifndef USE_AS_WMEMCMP
++	.p2align 4,, 10
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movzbl	(%rsi, %rax), %ecx
++	movzbl	(%rdi, %rax), %eax
++	subl	%ecx, %eax
++	ret
++# endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_start_1):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 1)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 1)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_2x_vec):
++	movups	(VEC_SIZE * 1)(%rsi), %xmm0
++	movups	(VEC_SIZE * 1)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_1)
++
++	cmpq	$(CHAR_PER_VEC * 8 - SIZE_OFFSET), %rdx
++	ja	L(more_8x_vec)
++
++	cmpl	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++
++	cmpl	$(CHAR_PER_VEC * 6 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm0
++	movups	(VEC_SIZE * 4)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 5)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++#ifdef USE_AS_MEMCMPEQ
++	jz	L(last_2x_vec)
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_start_4_5)
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(last_2x_vec):
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_vec_start_2_3):
++L(ret_nonzero_vec_start_4_5):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_end_1):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %eax
++
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4
++L(ret_nonzero_vec_start_2_3):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++	.p2align 4
++L(ret_nonzero_vec_start_4_5):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 4)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 4)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_8x_vec):
++	subq	%rdi, %rsi
++	leaq	(VEC_SIZE * -6 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %rdx
++	andq	$(VEC_SIZE * -1), %rdi
++	addq	%rdi, %rsi
++	.p2align 4
++L(loop_4x):
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 3)(%rsi), %xmm1
++
++	PCMPEQ	(VEC_SIZE * 2)(%rdi), %xmm0
++	PCMPEQ	(VEC_SIZE * 3)(%rdi), %xmm1
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rsi), %xmm3
++
++	PCMPEQ	(VEC_SIZE * 4)(%rdi), %xmm2
++	PCMPEQ	(VEC_SIZE * 5)(%rdi), %xmm3
++
++	pand	%xmm0, %xmm1
++	pand	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_loop)
++
++	addq	$(VEC_SIZE * 4), %rdi
++	addq	$(VEC_SIZE * 4), %rsi
++	cmpq	%rdi, %rdx
++	ja	L(loop_4x)
++	subq	%rdi, %rdx
++	cmpl	$(VEC_SIZE * -2), %edx
++	jle	L(loop_last_2x_vec)
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++L(loop_last_2x_vec):
++
++	movups	(VEC_SIZE * 4)(%rsi, %rdx), %xmm0
++	movups	(VEC_SIZE * 4)(%rdi, %rdx), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 5)(%rsi, %rdx), %xmm2
++	movups	(VEC_SIZE * 5)(%rdi, %rdx), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++
++#ifndef USE_AS_MEMCMPEQ
++	addl	$(VEC_SIZE * 6 - SIZE_OFFSET), %edx
++#endif	/* !USE_AS_MEMCMPEQ */
++#ifdef USE_AS_WMEMCMP
++	shrl	$2, %edx
++#endif	/* USE_AS_WMEMCMP */
++
++
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_loop):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	/* L(loop_ret_nonzero) and L(loop_tail_end) must be positioned
++	   so that jumps from within L(loop_0x0) can get 2-byte
++	   encoding. Otherwise the jump table with be incorrect.  */
++	.p2align 4
++L(ret_nonzero_loop):
++	pmovmskb %xmm0, %ecx
++	pmovmskb %xmm1, %edx
++	sall	$(VEC_SIZE * 1), %edx
++	leal	1(%rcx, %rdx), %edx
++	pmovmskb %xmm2, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++
++	salq	$32, %rax
++	orq	%rdx, %rax
++
++	bsfq	%rax, %rax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++END(MEMCMP)
+diff --git a/sysdeps/x86_64/multiarch/memcmp-sse2-v3.S b/sysdeps/x86_64/multiarch/memcmp-sse2-v3.S
+new file mode 100644
+index 0000000000..2898f8f6bc
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmp-sse2-v3.S
+@@ -0,0 +1,541 @@
++#include <sysdep.h>
++
++#ifdef USE_AS_WMEMCMP
++# define PCMPEQ	pcmpeqd
++# define CHAR_SIZE	4
++# define SIZE_OFFSET	(0)
++#else	/* !USE_AS_WMEMCMP */
++# define PCMPEQ	pcmpeqb
++# define CHAR_SIZE	1
++#endif	/* !USE_AS_WMEMCMP */
++
++#ifdef USE_AS_MEMCMPEQ
++# define SIZE_OFFSET	(0)
++# define CHECK_CMP(x, y)	subl x, y
++#else	/* !USE_AS_MEMCMPEQ */
++# ifndef SIZE_OFFSET
++#  define SIZE_OFFSET	(CHAR_PER_VEC * 2)
++# endif	/* !SIZE_OFFSET */
++# define CHECK_CMP(x, y)	cmpl x, y
++#endif	/* !USE_AS_MEMCMPEQ */
++
++#define VEC_SIZE	16
++#define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
++
++#ifndef MEMCMP
++# define MEMCMP	__memcmp_sse2_v3
++#endif
++
++ENTRY(MEMCMP)
++#ifdef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* USE_AS_WMEMCMP */
++	cmpq	$CHAR_PER_VEC, %rdx
++	ja	L(more_1x_vec)
++
++#ifdef USE_AS_WMEMCMP
++	decl	%edx
++	jle	L(cmp_0_1)
++
++	movq	(%rsi), %xmm0
++	movq	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++	movq	-4(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movq	-4(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_end_0_add8)
++#else	/* !USE_AS_WMEMCMP */
++	cmpl	$8, %edx
++	ja	L(cmp_9_16)
++
++	cmpl	$4, %edx
++	jb	L(cmp_0_3)
++
++
++# ifdef USE_AS_MEMCMPEQ
++	movl	(%rsi), %eax
++	subl	(%rdi), %eax
++
++	movl	-4(%rsi, %rdx), %esi
++	subl	-4(%rdi, %rdx), %esi
++
++	orl	%esi, %eax
++	ret
++# else	/* !USE_AS_MEMCMPEQ */
++	/* Load registers we need to shift first.  */
++	movl	-4(%rsi, %rdx), %ecx
++	movl	-4(%rdi, %rdx), %eax
++	shlq	$32, %rcx
++	shlq	$32, %rax
++	movl	(%rsi), %esi
++	movl	(%rdi), %edi
++	orq	%rsi, %rcx
++	orq	%rdi, %rax
++
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4,, 10
++L(cmp_9_16):
++
++# ifdef USE_AS_MEMCMPEQ
++	movq	(%rsi), %rax
++	subq	(%rdi), %rax
++
++	movq	-8(%rsi, %rdx), %rcx
++	subq	-8(%rdi, %rdx), %rcx
++	orq	%rcx, %rax
++	/* Convert 64 bit -> 32 bit boolean.  */
++	setnz	%cl
++	movzbl	%cl, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	movq	(%rsi), %rcx
++	movq	(%rdi), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++
++	movq	-8(%rsi, %rdx, CHAR_SIZE), %rcx
++	movq	-8(%rdi, %rdx, CHAR_SIZE), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4,, 8
++L(cmp_0_1):
++	jne	L(cmp_0_0)
++#ifdef USE_AS_WMEMCMP
++	movl	(%rdi), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi), %ecx
++	je	L(cmp_0_0)
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++#else	/* !USE_AS_WMEMCMP */
++	movzbl	(%rdi), %eax
++	movzbl	(%rsi), %ecx
++	subl	%ecx, %eax
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++L(cmp_0_0):
++	xorl	%eax, %eax
++	ret
++
++#ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movl	(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++	ret
++
++#else	/* !USE_AS_WMEMCMP */
++
++# ifndef USE_AS_MEMCMPEQ
++	.p2align 4,, 14
++L(ret_nonzero):
++	bswapq	%rcx
++	bswapq	%rax
++	subq	%rcx, %rax
++	sbbl	%eax, %eax
++	orl	$1, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(cmp_0_3):
++# ifdef USE_AS_MEMCMPEQ
++	/* No reason to add to dependency chain on rdx. Saving a the
++	   bytes here doesn't change number of fetch blocks.  */
++	cmpl	$1, %edx
++	jbe	L(cmp_0_1)
++# else	/* !USE_AS_MEMCMPEQ */
++	/* We need the code size to prevent taking an extra fetch block.
++	 */
++	decl	%edx
++	jle	L(cmp_0_1)
++# endif	/* !USE_AS_MEMCMPEQ */
++	movzwl	(%rsi), %ecx
++	movzwl	(%rdi), %eax
++
++# ifdef USE_AS_MEMCMPEQ
++	subl	%ecx, %eax
++
++	movzbl	-1(%rsi, %rdx), %esi
++	movzbl	-1(%rdi, %rdx), %edi
++	subl	%edi, %esi
++	orl	%esi, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	bswapl	%ecx
++	bswapl	%eax
++
++	/* Implicit right shift by one. We just need to displace the
++	   sign bits.  */
++	shrl	%ecx
++	shrl	%eax
++
++	/* Eat a partial register stall here. Saves code size. On SnB+
++	   this is likely worth it as the merging uop ~= cost of 2x
++	   ALU.  */
++	movb	(%rsi, %rdx), %cl
++	movzbl	(%rdi, %rdx), %edi
++	orl	%edi, %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++	ret
++#endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 5
++L(more_1x_vec):
++#ifndef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* !USE_AS_WMEMCMP */
++	movups	(%rsi), %xmm0
++	movups	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++#if SIZE_OFFSET == 0
++	cmpq	$(CHAR_PER_VEC * 2), %rdx
++#else	/* !SIZE_OFFSET == 0 */
++	subq	$(CHAR_PER_VEC * 2), %rdx
++#endif	/* !SIZE_OFFSET == 0 */
++	ja	L(more_2x_vec)
++
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++#ifndef USE_AS_MEMCMPEQ
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	jnz	L(ret_nonzero_vec_end_0)
++#else	/* USE_AS_MEMCMPEQ */
++L(ret_nonzero_vec_start_2_3):
++L(ret_nonzero_vec_start_4_5):
++L(ret_nonzero_vec_start_1):
++L(ret_nonzero_vec_start_0):
++L(ret_nonzero_vec_end_0):
++#endif	/* USE_AS_MEMCMPEQ */
++	ret
++
++#ifndef USE_AS_MEMCMPEQ
++# ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_end_0_add8):
++	addl	$3, %edx
++# else	/* !USE_AS_WMEMCMP */
++	.p2align 4,, 8
++# endif	/* !USE_AS_WMEMCMP */
++L(ret_nonzero_vec_end_0):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++# ifndef USE_AS_WMEMCMP
++	.p2align 4,, 10
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movzbl	(%rsi, %rax), %ecx
++	movzbl	(%rdi, %rax), %eax
++	subl	%ecx, %eax
++	ret
++# endif	/* !USE_AS_WMEMCMP */
++#else	/* USE_AS_MEMCMPEQ */
++#endif	/* USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_2x_vec):
++	movups	(VEC_SIZE * 1)(%rsi), %xmm0
++	movups	(VEC_SIZE * 1)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_1)
++
++	cmpq	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %rdx
++	jbe	L(last_2x_vec)
++
++	cmpq	$(CHAR_PER_VEC * 8 - SIZE_OFFSET), %rdx
++	ja	L(more_8x_vec)
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++
++	cmpl	$(CHAR_PER_VEC * 6 - SIZE_OFFSET), %edx
++	jbe	L(last_2x_vec)
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm0
++	movups	(VEC_SIZE * 4)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 5)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++#ifdef USE_AS_MEMCMPEQ
++	jz	L(last_2x_vec)
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_start_4_5)
++#endif	/* !USE_AS_MEMCMPEQ */
++	.p2align 4
++L(last_2x_vec):
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_end_1):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4
++L(ret_nonzero_vec_start_4_5):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 4)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 4)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 4)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++
++	.p2align 4
++L(ret_nonzero_vec_start_2_3):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_start_1):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 1)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 1)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_8x_vec):
++	subq	%rdi, %rsi
++	leaq	(VEC_SIZE * -6 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %rdx
++	andq	$(VEC_SIZE * -1), %rdi
++	addq	%rdi, %rsi
++	.p2align 4
++L(loop_4x):
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 3)(%rsi), %xmm1
++
++	PCMPEQ	(VEC_SIZE * 2)(%rdi), %xmm0
++	PCMPEQ	(VEC_SIZE * 3)(%rdi), %xmm1
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rsi), %xmm3
++
++	PCMPEQ	(VEC_SIZE * 4)(%rdi), %xmm2
++	PCMPEQ	(VEC_SIZE * 5)(%rdi), %xmm3
++
++	pand	%xmm0, %xmm1
++	pand	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_loop)
++
++	addq	$(VEC_SIZE * 4), %rdi
++	addq	$(VEC_SIZE * 4), %rsi
++	cmpq	%rdi, %rdx
++	ja	L(loop_4x)
++	subq	%rdi, %rdx
++	cmpl	$(VEC_SIZE * -2), %edx
++	jle	L(loop_last_2x_vec)
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++L(loop_last_2x_vec):
++
++	movups	(VEC_SIZE * 4)(%rsi, %rdx), %xmm0
++	movups	(VEC_SIZE * 4)(%rdi, %rdx), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 5)(%rsi, %rdx), %xmm2
++	movups	(VEC_SIZE * 5)(%rdi, %rdx), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++
++#ifndef USE_AS_MEMCMPEQ
++	addl	$(VEC_SIZE * 6 - SIZE_OFFSET), %edx
++#endif	/* !USE_AS_MEMCMPEQ */
++#ifdef USE_AS_WMEMCMP
++	shrl	$2, %edx
++#endif	/* USE_AS_WMEMCMP */
++
++
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_loop):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	/* L(loop_ret_nonzero) and L(loop_tail_end) must be positioned
++	   so that jumps from within L(loop_0x0) can get 2-byte
++	   encoding. Otherwise the jump table with be incorrect.  */
++	.p2align 4
++L(ret_nonzero_loop):
++	pmovmskb %xmm0, %ecx
++	pmovmskb %xmm1, %edx
++	sall	$(VEC_SIZE * 1), %edx
++	leal	1(%rcx, %rdx), %edx
++	pmovmskb %xmm2, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++
++	salq	$32, %rax
++	orq	%rdx, %rax
++
++	bsfq	%rax, %rax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++END(MEMCMP)
+diff --git a/sysdeps/x86_64/multiarch/memcmp-sse2-v4.S b/sysdeps/x86_64/multiarch/memcmp-sse2-v4.S
+new file mode 100644
+index 0000000000..387c9989a3
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmp-sse2-v4.S
+@@ -0,0 +1,549 @@
++#include <sysdep.h>
++
++#ifdef USE_AS_WMEMCMP
++# define PCMPEQ	pcmpeqd
++# define CHAR_SIZE	4
++# define SIZE_OFFSET	(0)
++#else	/* !USE_AS_WMEMCMP */
++# define PCMPEQ	pcmpeqb
++# define CHAR_SIZE	1
++#endif	/* !USE_AS_WMEMCMP */
++
++#ifdef USE_AS_MEMCMPEQ
++# define SIZE_OFFSET	(0)
++# define CHECK_CMP(x, y)	subl x, y
++#else	/* !USE_AS_MEMCMPEQ */
++# ifndef SIZE_OFFSET
++#  define SIZE_OFFSET	(CHAR_PER_VEC * 2)
++# endif	/* !SIZE_OFFSET */
++# define CHECK_CMP(x, y)	cmpl x, y
++#endif	/* !USE_AS_MEMCMPEQ */
++
++#define VEC_SIZE	16
++#define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
++
++#ifndef MEMCMP
++# define MEMCMP	__memcmp_sse2_v4
++#endif
++
++ENTRY(MEMCMP)
++#ifdef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* USE_AS_WMEMCMP */
++	cmpq	$CHAR_PER_VEC, %rdx
++	ja	L(more_1x_vec)
++
++#ifdef USE_AS_WMEMCMP
++	decl	%edx
++	jle	L(cmp_0_1)
++
++	movq	(%rsi), %xmm0
++	movq	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++	movq	-4(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movq	-4(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_end_0_add8)
++#else	/* !USE_AS_WMEMCMP */
++	cmpl	$8, %edx
++	ja	L(cmp_9_16)
++
++	cmpl	$4, %edx
++	jb	L(cmp_0_3)
++
++
++# ifdef USE_AS_MEMCMPEQ
++	movl	(%rsi), %eax
++	subl	(%rdi), %eax
++
++	movl	-4(%rsi, %rdx), %esi
++	subl	-4(%rdi, %rdx), %esi
++
++	orl	%esi, %eax
++	ret
++# else	/* !USE_AS_MEMCMPEQ */
++	/* Load registers we need to shift first.  */
++	movl	-4(%rsi, %rdx), %ecx
++	movl	-4(%rdi, %rdx), %eax
++	shlq	$32, %rcx
++	shlq	$32, %rax
++	movl	(%rsi), %esi
++	movl	(%rdi), %edi
++	orq	%rsi, %rcx
++	orq	%rdi, %rax
++
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4,, 10
++L(cmp_9_16):
++
++# ifdef USE_AS_MEMCMPEQ
++	movq	(%rsi), %rax
++	subq	(%rdi), %rax
++
++	movq	-8(%rsi, %rdx), %rcx
++	subq	-8(%rdi, %rdx), %rcx
++	orq	%rcx, %rax
++	/* Convert 64 bit -> 32 bit boolean.  */
++	setnz	%cl
++	movzbl	%cl, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	movq	(%rsi), %rcx
++	movq	(%rdi), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++
++	movq	-8(%rsi, %rdx, CHAR_SIZE), %rcx
++	movq	-8(%rdi, %rdx, CHAR_SIZE), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4,, 8
++L(cmp_0_1):
++	jne	L(cmp_0_0)
++#ifdef USE_AS_WMEMCMP
++	movl	(%rdi), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi), %ecx
++	je	L(cmp_0_0)
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++#else	/* !USE_AS_WMEMCMP */
++	movzbl	(%rdi), %eax
++	movzbl	(%rsi), %ecx
++	subl	%ecx, %eax
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++L(cmp_0_0):
++	xorl	%eax, %eax
++	ret
++
++#ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movl	(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++	ret
++
++#else	/* !USE_AS_WMEMCMP */
++
++# ifndef USE_AS_MEMCMPEQ
++	.p2align 4,, 14
++L(ret_nonzero):
++	bswapq	%rcx
++	bswapq	%rax
++	subq	%rcx, %rax
++	sbbl	%eax, %eax
++	orl	$1, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(cmp_0_3):
++# ifdef USE_AS_MEMCMPEQ
++	/* No reason to add to dependency chain on rdx. Saving a the
++	   bytes here doesn't change number of fetch blocks.  */
++	cmpl	$1, %edx
++	jbe	L(cmp_0_1)
++# else	/* !USE_AS_MEMCMPEQ */
++	/* We need the code size to prevent taking an extra fetch block.
++	 */
++	decl	%edx
++	jle	L(cmp_0_1)
++# endif	/* !USE_AS_MEMCMPEQ */
++	movzwl	(%rsi), %ecx
++	movzwl	(%rdi), %eax
++
++# ifdef USE_AS_MEMCMPEQ
++	subl	%ecx, %eax
++
++	movzbl	-1(%rsi, %rdx), %esi
++	movzbl	-1(%rdi, %rdx), %edi
++	subl	%edi, %esi
++	orl	%esi, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	bswapl	%ecx
++	bswapl	%eax
++
++	/* Implicit right shift by one. We just need to displace the
++	   sign bits.  */
++	shrl	%ecx
++	shrl	%eax
++
++	/* Eat a partial register stall here. Saves code size. On SnB+
++	   this is likely worth it as the merging uop ~= cost of 2x
++	   ALU.  */
++	movb	(%rsi, %rdx), %cl
++	movzbl	(%rdi, %rdx), %edi
++	orl	%edi, %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++	ret
++#endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 5
++L(more_1x_vec):
++#ifndef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* !USE_AS_WMEMCMP */
++	movups	(%rsi), %xmm0
++	movups	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++#if SIZE_OFFSET == 0
++	cmpq	$(CHAR_PER_VEC * 2), %rdx
++#else	/* !SIZE_OFFSET == 0 */
++	subq	$(CHAR_PER_VEC * 2), %rdx
++#endif	/* !SIZE_OFFSET == 0 */
++	ja	L(more_2x_vec)
++
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++#ifndef USE_AS_MEMCMPEQ
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	jnz	L(ret_nonzero_vec_end_0)
++#else	/* USE_AS_MEMCMPEQ */
++L(ret_nonzero_vec_start_1):
++L(ret_nonzero_vec_start_0):
++L(ret_nonzero_vec_end_0):
++#endif	/* USE_AS_MEMCMPEQ */
++	ret
++
++
++#ifndef USE_AS_MEMCMPEQ
++# ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_end_0_add8):
++	addl	$3, %edx
++# else	/* !USE_AS_WMEMCMP */
++	.p2align 4,, 8
++# endif	/* !USE_AS_WMEMCMP */
++L(ret_nonzero_vec_end_0):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++# ifndef USE_AS_WMEMCMP
++	.p2align 4,, 10
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movzbl	(%rsi, %rax), %ecx
++	movzbl	(%rdi, %rax), %eax
++	subl	%ecx, %eax
++	ret
++# endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_start_1):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 1)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 1)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_2x_vec):
++	movups	(VEC_SIZE * 1)(%rsi), %xmm0
++	movups	(VEC_SIZE * 1)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_1)
++
++	cmpq	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %rdx
++	jbe	L(last_2x_vec)
++
++
++	cmpq	$(CHAR_PER_VEC * 8 - SIZE_OFFSET), %rdx
++	ja	L(more_8x_vec)
++
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++
++	movups	(VEC_SIZE * -4 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -4 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -3 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -3 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++	jz	L(last_2x_vec)
++	ret
++	.p2align 5
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_2)
++#endif	/* !USE_AS_MEMnCMPEQ */
++
++	.p2align 4
++L(last_2x_vec):
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_vec_start_2_3):
++L(ret_nonzero_vec_end_2):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_end_1):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %eax
++
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4
++L(ret_nonzero_vec_start_2_3):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++	.p2align 4
++L(ret_nonzero_vec_end_2):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rdi, %rax), %eax
++
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_8x_vec):
++	subq	%rdi, %rsi
++	leaq	(VEC_SIZE * -6 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %rdx
++	andq	$(VEC_SIZE * -1), %rdi
++	addq	%rdi, %rsi
++	.p2align 4
++L(loop_4x):
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 3)(%rsi), %xmm1
++
++	PCMPEQ	(VEC_SIZE * 2)(%rdi), %xmm0
++	PCMPEQ	(VEC_SIZE * 3)(%rdi), %xmm1
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rsi), %xmm3
++
++	PCMPEQ	(VEC_SIZE * 4)(%rdi), %xmm2
++	PCMPEQ	(VEC_SIZE * 5)(%rdi), %xmm3
++
++	pand	%xmm0, %xmm1
++	pand	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_loop)
++
++	addq	$(VEC_SIZE * 4), %rdi
++	addq	$(VEC_SIZE * 4), %rsi
++	cmpq	%rdi, %rdx
++	ja	L(loop_4x)
++	subq	%rdi, %rdx
++	cmpl	$(VEC_SIZE * -2), %edx
++	jle	L(loop_last_2x_vec)
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++L(loop_last_2x_vec):
++
++	movups	(VEC_SIZE * 4)(%rsi, %rdx), %xmm0
++	movups	(VEC_SIZE * 4)(%rdi, %rdx), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 5)(%rsi, %rdx), %xmm2
++	movups	(VEC_SIZE * 5)(%rdi, %rdx), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++
++#ifndef USE_AS_MEMCMPEQ
++	addl	$(VEC_SIZE * 6 - SIZE_OFFSET), %edx
++#endif	/* !USE_AS_MEMCMPEQ */
++#ifdef USE_AS_WMEMCMP
++	shrl	$2, %edx
++#endif	/* USE_AS_WMEMCMP */
++
++
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_loop):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	/* L(loop_ret_nonzero) and L(loop_tail_end) must be positioned
++	   so that jumps from within L(loop_0x0) can get 2-byte
++	   encoding. Otherwise the jump table with be incorrect.  */
++	.p2align 4
++L(ret_nonzero_loop):
++	pmovmskb %xmm0, %ecx
++	pmovmskb %xmm1, %edx
++	sall	$(VEC_SIZE * 1), %edx
++	leal	1(%rcx, %rdx), %edx
++	pmovmskb %xmm2, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++
++	salq	$32, %rax
++	orq	%rdx, %rax
++
++	bsfq	%rax, %rax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++END(MEMCMP)
+diff --git a/sysdeps/x86_64/multiarch/memcmpeq-sse2-v0.S b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v0.S
+new file mode 100644
+index 0000000000..e0ee8d49d1
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v0.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__memcmpeq_sse2_v0
++#define USE_AS_MEMCMPEQ
++#include "memcmp-sse2-v0.S"
+diff --git a/sysdeps/x86_64/multiarch/memcmpeq-sse2-v1.S b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v1.S
+new file mode 100644
+index 0000000000..ffff08217b
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v1.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__memcmpeq_sse2_v1
++#define USE_AS_MEMCMPEQ
++#include "memcmp-sse2-v1.S"
+diff --git a/sysdeps/x86_64/multiarch/memcmpeq-sse2-v2.S b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v2.S
+new file mode 100644
+index 0000000000..f268649657
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v2.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__memcmpeq_sse2_v2
++#define USE_AS_MEMCMPEQ
++#include "memcmp-sse2-v2.S"
+diff --git a/sysdeps/x86_64/multiarch/memcmpeq-sse2-v3.S b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v3.S
+new file mode 100644
+index 0000000000..01fc7b0e54
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v3.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__memcmpeq_sse2_v3
++#define USE_AS_MEMCMPEQ
++#include "memcmp-sse2-v3.S"
+diff --git a/sysdeps/x86_64/multiarch/memcmpeq-sse2-v4.S b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v4.S
+new file mode 100644
+index 0000000000..fdee64beb5
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v4.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__memcmpeq_sse2_v4
++#define USE_AS_MEMCMPEQ
++#include "memcmp-sse2-v4.S"
+diff --git a/sysdeps/x86_64/multiarch/memcmpeq-sse2-v5.S b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v5.S
+new file mode 100644
+index 0000000000..62d40b7c83
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memcmpeq-sse2-v5.S
+@@ -0,0 +1,490 @@
++#include <sysdep.h>
++#define USE_AS_MEMCMPEQ
++#ifdef USE_AS_WMEMCMP
++# define PCMPEQ	pcmpeqd
++# define CHAR_SIZE	4
++# define SIZE_OFFSET	(0)
++#else	/* !USE_AS_WMEMCMP */
++# define PCMPEQ	pcmpeqb
++# define CHAR_SIZE	1
++#endif	/* !USE_AS_WMEMCMP */
++
++#ifdef USE_AS_MEMCMPEQ
++# define SIZE_OFFSET	(0)
++# define CHECK_CMP(x, y)	subl x, y
++#else	/* !USE_AS_MEMCMPEQ */
++# ifndef SIZE_OFFSET
++#  define SIZE_OFFSET	(CHAR_PER_VEC * 2)
++# endif	/* !SIZE_OFFSET */
++# define CHECK_CMP(x, y)	cmpl x, y
++#endif	/* !USE_AS_MEMCMPEQ */
++
++#define VEC_SIZE	16
++#define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
++
++#define MEMCMP	__memcmpeq_sse2_v5
++
++ENTRY(MEMCMP)
++#ifdef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* USE_AS_WMEMCMP */
++	cmpq	$CHAR_PER_VEC, %rdx
++	ja	L(more_1x_vec)
++
++#ifdef USE_AS_WMEMCMP
++	decl	%edx
++	jle	L(cmp_0_1)
++
++	movq	(%rsi), %xmm0
++	movq	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++	movq	-4(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movq	-4(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_end_0_add8)
++#else	/* !USE_AS_WMEMCMP */
++	cmpl	$8, %edx
++	ja	L(cmp_9_16)
++
++	cmpl	$4, %edx
++	jb	L(cmp_0_3)
++
++
++# ifdef USE_AS_MEMCMPEQ
++	movl	(%rsi), %eax
++	subl	(%rdi), %eax
++
++	movl	-4(%rsi, %rdx), %esi
++	subl	-4(%rdi, %rdx), %esi
++
++	orl	%esi, %eax
++	ret
++# else	/* !USE_AS_MEMCMPEQ */
++	/* Load registers we need to shift first.  */
++	movl	-4(%rsi, %rdx), %ecx
++	movl	-4(%rdi, %rdx), %eax
++	shlq	$32, %rcx
++	shlq	$32, %rax
++	movl	(%rsi), %esi
++	movl	(%rdi), %edi
++	orq	%rsi, %rcx
++	orq	%rdi, %rax
++
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4,, 10
++L(cmp_9_16):
++
++# ifdef USE_AS_MEMCMPEQ
++	movq	(%rsi), %rax
++	subq	(%rdi), %rax
++
++	movq	-8(%rsi, %rdx), %rcx
++	subq	-8(%rdi, %rdx), %rcx
++	orq	%rcx, %rax
++	/* Convert 64 bit -> 32 bit boolean.  */
++	setnz	%cl
++	movzbl	%cl, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	movq	(%rsi), %rcx
++	movq	(%rdi), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++
++	movq	-8(%rsi, %rdx, CHAR_SIZE), %rcx
++	movq	-8(%rdi, %rdx, CHAR_SIZE), %rax
++	cmpq	%rcx, %rax
++	jnz	L(ret_nonzero)
++	xorl	%eax, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4,, 8
++L(cmp_0_1):
++	jne	L(cmp_0_0)
++#ifdef USE_AS_WMEMCMP
++	movl	(%rdi), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi), %ecx
++	je	L(cmp_0_0)
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++#else	/* !USE_AS_WMEMCMP */
++	movzbl	(%rdi), %eax
++	movzbl	(%rsi), %ecx
++	subl	%ecx, %eax
++#endif	/* !USE_AS_WMEMCMP */
++	ret
++
++L(cmp_0_0):
++	xorl	%eax, %eax
++	ret
++
++#ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movl	(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++	ret
++
++#else	/* !USE_AS_WMEMCMP */
++
++# ifndef USE_AS_MEMCMPEQ
++	.p2align 4,, 14
++L(ret_nonzero):
++	bswapq	%rcx
++	bswapq	%rax
++	subq	%rcx, %rax
++	sbbl	%eax, %eax
++	orl	$1, %eax
++	ret
++# endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(cmp_0_3):
++# ifdef USE_AS_MEMCMPEQ
++	/* No reason to add to dependency chain on rdx. Saving a the
++	   bytes here doesn't change number of fetch blocks.  */
++	cmpl	$1, %edx
++	jbe	L(cmp_0_1)
++# else	/* !USE_AS_MEMCMPEQ */
++	/* We need the code size to prevent taking an extra fetch block.
++	 */
++	decl	%edx
++	jle	L(cmp_0_1)
++# endif	/* !USE_AS_MEMCMPEQ */
++	movzwl	(%rsi), %ecx
++	movzwl	(%rdi), %eax
++
++# ifdef USE_AS_MEMCMPEQ
++	subl	%ecx, %eax
++
++	movzbl	-1(%rsi, %rdx), %esi
++	movzbl	-1(%rdi, %rdx), %edi
++	subl	%edi, %esi
++	orl	%esi, %eax
++# else	/* !USE_AS_MEMCMPEQ */
++	bswapl	%ecx
++	bswapl	%eax
++
++	/* Implicit right shift by one. We just need to displace the
++	   sign bits.  */
++	shrl	%ecx
++	shrl	%eax
++
++	/* Eat a partial register stall here. Saves code size. On SnB+
++	   this is likely worth it as the merging uop ~= cost of 2x
++	   ALU.  */
++	movb	(%rsi, %rdx), %cl
++	movzbl	(%rdi, %rdx), %edi
++	orl	%edi, %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_MEMCMPEQ */
++	ret
++#endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 5
++L(more_1x_vec):
++#ifndef USE_AS_WMEMCMP
++	movl	$0xffff, %ecx
++#endif	/* !USE_AS_WMEMCMP */
++	movups	(%rsi), %xmm0
++	movups	(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_0)
++
++#if SIZE_OFFSET == 0
++	cmpq	$(CHAR_PER_VEC * 2), %rdx
++#else	/* !SIZE_OFFSET == 0 */
++	subq	$(CHAR_PER_VEC * 2), %rdx
++#endif	/* !SIZE_OFFSET == 0 */
++	ja	L(more_2x_vec)
++
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++#ifndef USE_AS_MEMCMPEQ
++	/* Don't use `incw ax` as machines this code runs on are liable
++	   to have partial register stall.  */
++	jnz	L(ret_nonzero_vec_end_0)
++#else	/* USE_AS_MEMCMPEQ */
++L(ret_nonzero_vec_start_1):
++L(ret_nonzero_vec_start_0):
++L(ret_nonzero_vec_end_0):
++#endif	/* USE_AS_MEMCMPEQ */
++	ret
++
++
++#ifndef USE_AS_MEMCMPEQ
++# ifdef USE_AS_WMEMCMP
++	.p2align 4
++L(ret_nonzero_vec_end_0_add8):
++	addl	$3, %edx
++# else	/* !USE_AS_WMEMCMP */
++	.p2align 4,, 8
++# endif	/* !USE_AS_WMEMCMP */
++L(ret_nonzero_vec_end_0):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++# ifndef USE_AS_WMEMCMP
++	.p2align 4,, 10
++L(ret_nonzero_vec_start_0):
++	bsfl	%eax, %eax
++	movzbl	(%rsi, %rax), %ecx
++	movzbl	(%rdi, %rax), %eax
++	subl	%ecx, %eax
++	ret
++# endif	/* !USE_AS_WMEMCMP */
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_start_1):
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 1)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 1)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 1)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_2x_vec):
++	movups	(VEC_SIZE * 1)(%rsi), %xmm0
++	movups	(VEC_SIZE * 1)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	pmovmskb %xmm1, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_vec_start_1)
++
++	cmpq	$(CHAR_PER_VEC * 4 - SIZE_OFFSET), %rdx
++	jbe	L(last_2x_vec)
++
++
++	cmpq	$(CHAR_PER_VEC * 8 - SIZE_OFFSET), %rdx
++	ja	L(more_8x_vec)
++
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jnz	L(ret_nonzero_vec_start_2_3)
++
++	movups	(VEC_SIZE * -4 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -4 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -3 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -3 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++	jz	L(last_2x_vec)
++	ret
++	.p2align 5
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_2)
++#endif	/* !USE_AS_MEMnCMPEQ */
++
++	.p2align 4
++L(last_2x_vec):
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm0
++	movups	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rsi, %rdx, CHAR_SIZE), %xmm2
++	movups	(VEC_SIZE * -1 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++#ifdef USE_AS_MEMCMPEQ
++L(ret_nonzero_vec_start_2_3):
++L(ret_nonzero_vec_end_2):
++	ret
++#else	/* !USE_AS_MEMCMPEQ */
++	jnz	L(ret_nonzero_vec_end_1)
++	ret
++
++	.p2align 4,, 8
++L(ret_nonzero_vec_end_1):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -2 + SIZE_OFFSET)(%rdi, %rax), %eax
++
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++	.p2align 4
++L(ret_nonzero_vec_start_2_3):
++	pmovmskb %xmm1, %edx
++	sall	$16, %eax
++	leal	1(%rax, %rdx), %eax
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	movl	(VEC_SIZE * 2)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	movzbl	(VEC_SIZE * 2)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * 2)(%rdi, %rax), %eax
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++	.p2align 4
++L(ret_nonzero_vec_end_2):
++	pmovmskb %xmm1, %ecx
++	rorl	$16, %eax
++	xorl	%ecx, %eax
++	/* Partial register stall.  */
++
++	bsfl	%eax, %eax
++# ifdef USE_AS_WMEMCMP
++	leal	(%rax, %rdx, CHAR_SIZE), %eax
++	movl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rdi, %rax), %ecx
++	xorl	%edx, %edx
++	cmpl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	/* NB: no partial register stall here because xorl zero idiom
++	   above.  */
++	setg	%dl
++	leal	-1(%rdx, %rdx), %eax
++# else	/* !USE_AS_WMEMCMP */
++	addl	%edx, %eax
++	movzbl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rsi, %rax), %ecx
++	movzbl	(VEC_SIZE * -4 + SIZE_OFFSET)(%rdi, %rax), %eax
++
++	subl	%ecx, %eax
++# endif	/* !USE_AS_WMEMCMP */
++	ret
++
++
++#endif	/* !USE_AS_MEMCMPEQ */
++
++	.p2align 4
++L(more_8x_vec):
++	subq	%rdi, %rsi
++	leaq	(VEC_SIZE * -6 + SIZE_OFFSET)(%rdi, %rdx, CHAR_SIZE), %rdx
++	andq	$(VEC_SIZE * -1), %rdi
++	addq	%rdi, %rsi
++	.p2align 4
++L(loop_4x):
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 3)(%rsi), %xmm1
++
++	PCMPEQ	(VEC_SIZE * 2)(%rdi), %xmm0
++	PCMPEQ	(VEC_SIZE * 3)(%rdi), %xmm1
++
++	movups	(VEC_SIZE * 4)(%rsi), %xmm2
++	movups	(VEC_SIZE * 5)(%rsi), %xmm3
++
++	PCMPEQ	(VEC_SIZE * 4)(%rdi), %xmm2
++	PCMPEQ	(VEC_SIZE * 5)(%rdi), %xmm3
++
++	pand	%xmm0, %xmm1
++	pand	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	subl	%ecx, %eax
++	jnz	L(ret_nonzero_loop)
++
++	addq	$(VEC_SIZE * 4), %rdi
++	addq	$(VEC_SIZE * 4), %rsi
++	cmpq	%rdi, %rdx
++	ja	L(loop_4x)
++	subl	%edi, %edx
++	addl	$(VEC_SIZE * 6 - SIZE_OFFSET), %edx
++	cmpl	$(VEC_SIZE * 4), %edx
++	jle	L(last_2x_vec)
++
++	movups	(VEC_SIZE * 2)(%rsi), %xmm0
++	movups	(VEC_SIZE * 2)(%rdi), %xmm1
++	PCMPEQ	%xmm0, %xmm1
++	movups	(VEC_SIZE * 3)(%rsi), %xmm2
++	movups	(VEC_SIZE * 3)(%rdi), %xmm3
++	PCMPEQ	%xmm2, %xmm3
++	pand	%xmm1, %xmm3
++
++	pmovmskb %xmm3, %eax
++	CHECK_CMP (%ecx, %eax)
++	jz	L(last_2x_vec)
++L(ret_nonzero_loop):
++	ret
++END(MEMCMP)
+diff --git a/sysdeps/x86_64/multiarch/wmemcmp-avx2-v0.S b/sysdeps/x86_64/multiarch/wmemcmp-avx2-v0.S
+new file mode 100644
+index 0000000000..23c798d0db
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/wmemcmp-avx2-v0.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__wmemcmp_avx2_v0
++#define USE_AS_WMEMCMP
++#include "memcmp-avx2-v0.S"
+diff --git a/sysdeps/x86_64/multiarch/wmemcmp-sse2-v0.S b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v0.S
+new file mode 100644
+index 0000000000..1e6355a62b
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v0.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__wmemcmp_sse2_v0
++#define USE_AS_WMEMCMP
++#include "memcmp-sse2-v0.S"
+diff --git a/sysdeps/x86_64/multiarch/wmemcmp-sse2-v1.S b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v1.S
+new file mode 100644
+index 0000000000..5ec9d4380b
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v1.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__wmemcmp_sse2_v1
++#define USE_AS_WMEMCMP
++#include "memcmp-sse2-v1.S"
+diff --git a/sysdeps/x86_64/multiarch/wmemcmp-sse2-v2.S b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v2.S
+new file mode 100644
+index 0000000000..024d5d28a2
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v2.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__wmemcmp_sse2_v2
++#define USE_AS_WMEMCMP
++#include "memcmp-sse2-v2.S"
+diff --git a/sysdeps/x86_64/multiarch/wmemcmp-sse2-v3.S b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v3.S
+new file mode 100644
+index 0000000000..358d806a4e
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v3.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__wmemcmp_sse2_v3
++#define USE_AS_WMEMCMP
++#include "memcmp-sse2-v3.S"
+diff --git a/sysdeps/x86_64/multiarch/wmemcmp-sse2-v4.S b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v4.S
+new file mode 100644
+index 0000000000..7e1b16389d
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/wmemcmp-sse2-v4.S
+@@ -0,0 +1,3 @@
++#define MEMCMP	__wmemcmp_sse2_v4
++#define USE_AS_WMEMCMP
++#include "memcmp-sse2-v4.S"
+-- 
+2.25.1
+
