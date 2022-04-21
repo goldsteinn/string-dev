@@ -334,6 +334,8 @@ class JsonFile():
                                                 self.fields)
             align1, self.fields = set_if_exists(result, "alignment", align1,
                                                 self.fields)
+            align1, self.fields = set_if_exists(result, "align", align1,
+                                                self.fields)            
             align2, self.fields = set_if_exists(result, "align2", align2,
                                                 self.fields)
             dgs, self.fields = set_if_exists(result, "dst > src", dgs,
@@ -342,22 +344,24 @@ class JsonFile():
 
             wfs, self.fields = set_if_exists(result, "with-fixed-size", wfs,
                                              self.fields)
-            pos, self.fields = set_if_exists(result, "pos", pos, self.fields)
+            align2, self.fields = set_if_exists(result, "pos", pos, self.fields)
             rand, self.fields = set_if_exists(result, "rand", rand,
                                               self.fields)
             perc_zero, self.fields = set_if_exists(result, "perc-zero",
                                                    perc_zero, self.fields)
             branch, self.fields = set_if_exists(result, "branch", branch,
                                                 self.fields)
-            seek_char, self.fields = set_if_exists(result, "seek_char",
-                                                   seek_char, self.fields)
-            max_char, self.fields = set_if_exists(result, "max_char", max_char,
-                                                  self.fields)
+            dgs, self.fields = set_if_exists(result, "seek_char", dgs,
+                                             self.fields)
+            dgs, self.fields = set_if_exists(result, "seek", dgs, self.fields)
+            wfs, self.fields = set_if_exists(result, "max_char", wfs,
+                                             self.fields)
 
             sz, self.fields = set_if_exists(result, "overlap", sz, self.fields)
             sz, self.fields = set_if_exists(result, "size", sz, self.fields)
             sz, self.fields = set_if_exists(result, "result", sz, self.fields)
             sz, self.fields = set_if_exists(result, "char", sz, self.fields)
+            sz, self.fields = set_if_exists(result, "freq", sz, self.fields)
 
             key = get_key(length, align1, align2, dgs, wfs, sz)
             if "memmove" in self.get_bench_func() and align1 == align2:
@@ -403,8 +407,8 @@ class JsonFile():
         for impl in impls:
             impl_ifuncs.append(self.find_ifunc(impl))
 
-        print(str(impls))
-        print(str(impl_ifuncs))
+        #print(str(impls))
+        #print(str(impl_ifuncs))
 
         assert len(impls) == len(impl_ifuncs)
         print(self.func_hdr())

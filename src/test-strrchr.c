@@ -53,6 +53,7 @@ test_strrchr_kernel(void const *   test_f,
     test_size = ROUNDDOWN_P2(test_size, wsize);
     for (uint32_t i = INIT_I; i < nalignments * 2; ++i) {
         uint32_t al_offset = ROUNDUP_P2(alignments[i % nalignments], wsize);
+        fprintf(stderr, "%u\n", i);
         al_offset = (i >= nalignments ? PAGE_SIZE - al_offset : al_offset);
         if (al_offset > test_size) {
             continue;
@@ -102,6 +103,7 @@ test_strrchr_kernel(void const *   test_f,
                 }
                 test_assert(res == expec, FAILURE_MSG);
 
+                test_assert(run(test_buf, 0x0) == test_buf + k, FAILURE_MSG);
                 memset_c(test_buf + k, 0xff, wsize);
             }
         }

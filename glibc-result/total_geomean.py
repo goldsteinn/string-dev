@@ -3,7 +3,7 @@
 import sys
 import statistics
 
-assert len(sys.argv) >= 2
+assert len(sys.argv) > 2
 
 
 def gm(f, sf):
