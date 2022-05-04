@@ -1,7 +1,7 @@
 #ifndef _SRC__ASM__ASM_COMMON_H_
 #define _SRC__ASM__ASM_COMMON_H_
 
-#define _L(name)          L##name
+#define _L(name)         L##name
 #define L(name)          _L(name)
 #define NAME_LABEL(name) name##:
 
@@ -29,6 +29,7 @@
     ENTRY_END(name)
 
 #define PAGE_ALIGN_CODE .align 4096;
+#define ALIGN_ENTRY     0
 #ifndef ALIGN_ENTRY
 #define ALIGN_ENTRY 0
 #endif

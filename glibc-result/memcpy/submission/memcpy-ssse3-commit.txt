@@ -1,0 +1,28 @@
+x86: Optimize memmove-ssse3.S
+
+The goal is to remove most SSSE3 function as SSE4, AVX2, and EVEX are
+generally preferable. memcpy/memmove is one exception where avoiding
+unaligned loads with `palignr` is important for some targets.
+
+This commit replaces memmove-ssse3 with a better optimized are lower
+code footprint verion. As well it aliases memcpy to memmove.
+
+Aside from this function all other SSSE3 functions should be safe to
+remove.
+
+The performance is not changed drastically although shows overall
+improvements without any major regressions or gains.
+
+bench-memcpy geometric_mean(N=50) New / Original: 0.957
+
+bench-memcpy-random geometric_mean(N=50) New / Original: 0.912
+
+bench-memcpy-large geometric_mean(N=50) New / Original: 0.892
+
+Benchmarks where run on Zhaoxin KX-6840@2000MHz See attached numbers
+for all results.
+
+More important this saves 7246 bytes of code size in memmove an
+additional 10741 bytes by reusing memmove code for memcpy (total 17987
+bytes saves). As well an additional 896 bytes of rodata for the jump
+table entries.

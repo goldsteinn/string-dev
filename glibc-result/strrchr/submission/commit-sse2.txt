@@ -1,0 +1,9 @@
+x86: Optimize {str|wcs}rchr-sse2
+
+The new code unrolls the main loop slightly without adding too much
+overhead and minimizes the comparisons for the search CHAR.
+
+Geometric Mean of all benchmarks New / Old: 0.741
+See email for all results.
+
+Full xcheck passes on x86_64 with and without multiarch enabled.

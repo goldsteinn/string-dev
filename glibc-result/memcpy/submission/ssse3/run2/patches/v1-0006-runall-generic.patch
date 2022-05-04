@@ -1,0 +1,25 @@
+From 6ae1d84044fc90c3eb6d42be17a67a3acfeacfe7 Mon Sep 17 00:00:00 2001
+From: Noah Goldstein <goldstein.w.n@gmail.com>
+Date: Tue, 12 Apr 2022 10:00:17 -0500
+Subject: [PATCH v1 6/6] runall generic
+
+---
+ runall.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/runall.py b/runall.py
+index 21b432de2f..1387b8f64d 100644
+--- a/runall.py
++++ b/runall.py
+@@ -35,7 +35,7 @@ funcs = {
+     "strcmp": ["strcmp{}", "strncmp{}", "strcasecmp{}", "strncasecmp{}"]
+ }
+ 
+-root = "/home/zhaoxin/programs/glibc-dev"
++root = sys.argv[1]
+ git_src_path = root + "/src/glibc"
+ glibc_path = root + "/build/glibc/"
+ bench_path = glibc_path + "benchtests/"
+-- 
+2.25.1
+

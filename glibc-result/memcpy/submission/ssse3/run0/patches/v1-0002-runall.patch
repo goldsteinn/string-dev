@@ -1,0 +1,155 @@
+From 34417519658b3496d24b61965fe5946b8d8882a2 Mon Sep 17 00:00:00 2001
+From: Noah Goldstein <goldstein.w.n@gmail.com>
+Date: Mon, 4 Apr 2022 23:50:41 -0500
+Subject: [PATCH v1 2/3] runall
+
+---
+ runall.py | 136 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 136 insertions(+)
+ create mode 100644 runall.py
+
+diff --git a/runall.py b/runall.py
+new file mode 100644
+index 0000000000..b0e6eed688
+--- /dev/null
++++ b/runall.py
+@@ -0,0 +1,136 @@
++#! /usr/bin/env python3
++
++import os
++import signal
++import sys
++
++
++def sig_exit(signum, empty):
++    print("Exiting on Signal({})".format(str(signum)))
++    sys.exit(-1)
++
++
++signal.signal(signal.SIGINT, sig_exit)
++
++funcs = {
++    "memmove": ["memmove{}", "memmove-large{}", "memmove-walk{}"],
++    "memcpy":
++    ["memcpy{}", "memcpy-large{}", "memcpy-walk{}", "memcpy-random{}"],
++    "memcmp": ["memcmp{}", "wmemcmp{}"],
++    "bcmp": ["bcmp{}"],
++    "strstr": ["strstr{}"],
++    "memmem": ["memmem{}"],
++    "memset": ["memset{}", "memset-walk{}", "memset-large{}", "wmemset{}"],
++    "bzero": ["bzero{}", "bzero-walk{}", "bzero-large{}"],
++    "memset-zero":
++    ["memset-zero{}", "memset-zero-walk{}", "memset-zero-large{}"],
++    "strchr": ["strchr{}", "strchrnul{}", "wcschr{}", "wcschrnul{}"],
++    "strspn": ["strspn{}"],
++    "strcspn": ["strcspn{}"],
++    "wcslen": ["wcslen{}", "wcsnlen{}"],
++    "wcscpy": [
++        "wcsncpy{}", "wcscpy{}", "wcpcpy{}", "wcpncpy{}", "wcscat{}",
++        "wcsncat{}"
++    ],
++    "strcmp": ["strcmp{}", "strncmp{}", "strcasecmp{}", "strncasecmp{}"]
++}
++
++root = "/home/zhaoxin/programs/glibc-dev"
++git_src_path = root + "/src/glibc"
++glibc_path = root + "/build/glibc/"
++bench_path = glibc_path + "benchtests/"
++result_path_dir = root + "/dev-results/"
++result_path = result_path_dir + "{}/"
++bench_cmd = "(cd " + glibc_path + "; unset LD_LIBRARY_PATH; taskset -c 0 make --silent bench BENCHSET=\"wcsmbs-benchset\")"
++
++build_cmd_slow = "rm -rf build/glibc; mkdir -p build/glibc; (cd " + glibc_path + "; unset LD_LIBRARY_PATH; " + root + "/src/glibc/configure --prefix=/usr; make -j 4 --silent)"
++build_cmd_fast = "(cd " + glibc_path + "; unset LD_LIBRARY_PATH; make -j 4 --silent)"
++file_prefix = "bench-"
++file_postfix = ".out"
++
++from_path = root + "/dev/{}.S"
++to_path = root + "/src/glibc/sysdeps/x86_64/multiarch/memmove-conf.S"
++
++current_branch = ""
++
++
++class Conf():
++    def __init__(self, version, branch):
++        self.version = version
++        self.branch = branch
++
++    def get_branch(self):
++        multi_branch = True
++        global current_branch
++
++        if multi_branch and current_branch != self.branch:
++            os.system("(cd {}; git checkout {})".format(
++                git_src_path, self.branch))
++            current_branch = self.branch
++            return True
++        return False
++
++    def name(self):
++        if self.version is None:
++            return self.branch
++        else:
++            return "{}-{}".format(self.branch, self.version)
++
++    def write_conf(self):
++        ret = self.get_branch()
++
++        if self.version is None:
++            return ret
++
++        content = [
++            "#ifndef _BENCHMARK_CONF_H_", "#define _BENCHMARK_CONF_H_",
++            "#define ALIGN_MOVSB 1", "#define LOOP_ALIGN_CONF 64",
++            "#define MOVSB_ALIGN_CONF 64",
++            "#define VERSION " + str(self.version), "#endif"
++        ]
++        f = open(to_path, "w+")
++        for c in content:
++            f.write(c + "\n")
++        f.flush()
++        f.close()
++        return ret
++
++
++confs = []
++confs.append(Conf(None, "users/goldsteinn/benchmark-ssse3"))
++
++
++def build(conf):
++    slow_build = True
++    conf.write_conf()
++    if slow_build:
++        print("Running: {}".format(build_cmd_slow))
++        os.system(build_cmd_slow)
++    else:
++        print("Running: {}".format(build_cmd_fast))
++        os.system(build_cmd_fast)
++
++
++def bench(conf, base, inc):
++    impl_result_path = result_path.format(conf.name())
++    os.system("mkdir -p {}".format(impl_result_path))
++
++    for i in range(base, base + inc):
++        print("Running: {} - {}".format(conf.name(), i))
++        os.system(bench_cmd)
++        for func in funcs:
++            impl_result_path = result_path.format(conf.name(), func)
++            for f in funcs[func]:
++                fname = file_prefix + f + file_postfix
++                src = bench_path + fname.format("")
++                dst = impl_result_path + fname.format(i)
++                if os.path.isfile(src):
++                    os.system("cp {} {}".format(src, dst))
++
++
++os.system("rm -rf {};".format(result_path.format("*")))
++incr = 50
++for i in range(0, 1):
++    for c in confs:
++        build(c)
++        bench(c, incr * i, incr)
+-- 
+2.25.1
+

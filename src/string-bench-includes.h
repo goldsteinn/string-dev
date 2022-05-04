@@ -14,6 +14,8 @@
 
 #define wmemcmp_make_bench empty_make_bench
 
+
+#include "bench-memchr.h"
 #include "bench-memcmp.h"
 #include "bench-memcpy.h"
 #include "bench-strchr.h"

@@ -63,6 +63,47 @@ empty_bench_init(bench_info_t const * unused) {
 
 
 static void
+memchr_bench_init_shared(bench_info_t const * bench_info,
+                         const uint32_t       wsize) {
+    uint8_t * _s0;
+    uint32_t  _sz0, _sz1;
+    die_assert(bench_info);
+
+    _s0  = bench_info->s0;
+    _sz0 = bench_info->sz0;
+    _sz1 = bench_info->sz1;
+
+    die_assert(_s0);
+
+    /* sz0 -> len passed
+       sz1 -> position of CHAR */
+
+    memset_c(_s0, -1, _sz0 * wsize | 4096);
+    memset_c(_s0 + _sz1 * wsize, 0x0, wsize);
+}
+
+static void
+memrchr_bench_init(bench_info_t const * bench_info) {
+    uint8_t * _s0;
+    uint32_t  _sz0, _sz1;
+    die_assert(bench_info);
+
+    _s0  = bench_info->s0;
+    _sz0 = bench_info->sz0;
+    _sz1 = bench_info->sz1;
+
+    die_assert(_s0);
+
+    /* sz0 -> len passed
+       sz1 -> position of CHAR (backwards) */
+
+    memset_c(_s0, -1, _sz0 | 4096);
+    if (_sz1 <= _sz0) {
+        memset_c(_s0 + (_sz0 - _sz1), 0x0, 1);
+    }
+}
+
+static void
 strrchr_bench_init_shared(bench_info_t const * bench_info,
                           const uint32_t       wsize) {
     uint8_t * _s0;
@@ -86,10 +127,10 @@ strrchr_bench_init_shared(bench_info_t const * bench_info,
         memset_c(_s0, 0x01010101, _sz0 * wsize);
     }
     else {
-        memset_c(_s0, 0xffffffff, _sz0 * wsize);
-        memset_c(_s0 + _sz1 + wsize, 0x01010101, wsize);
+        memset_c(_s0, -1, _sz0 * wsize);
+        memset_c(_s0 + _sz1 * wsize, 0x01010101, wsize);
     }
-    memset_c(_s0 + _sz0 + wsize, 0x0, wsize);
+    memset_c(_s0 + _sz0 * wsize, 0x0, wsize);
 }
 
 static void
@@ -118,7 +159,7 @@ memcmp_bench_init(bench_info_t * bench_info) {
     die_assert(bench_info->s0);
     die_assert(bench_info->s1);
 
-    uint8_t * _s0, *_s1;
+    uint8_t *_s0, *_s1;
     uint32_t _sz0, _sz1;
 
     _s0 = bench_info->s0;
@@ -135,4 +176,16 @@ memcmp_bench_init(bench_info_t * bench_info) {
 
 #define memcmpeq_bench_init memcmp_bench_init
 #define wmemcmp_bench_init  empty_bench_init
+
+static void
+memchr_bench_init(bench_info_t * bench_info) {
+    memchr_bench_init_shared(bench_info, 1);
+}
+
+static void
+wmemchr_bench_init(bench_info_t * bench_info) {
+    memchr_bench_init_shared(bench_info, 4);
+}
+
+
 #endif

@@ -1,0 +1,53 @@
+From 508ffd11e6e83594fcddce9af0502228248daa7c Mon Sep 17 00:00:00 2001
+From: Noah Goldstein <goldstein.w.n@gmail.com>
+Date: Sat, 9 Apr 2022 01:08:30 -0500
+Subject: [PATCH v1 4/6] fixup configs
+
+---
+ sysdeps/x86_64/multiarch/ifunc-impl-list.c     | 2 +-
+ sysdeps/x86_64/multiarch/memmove-ssse3-large.S | 2 +-
+ sysdeps/x86_64/multiarch/memmove-ssse3-small.S | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/sysdeps/x86_64/multiarch/ifunc-impl-list.c b/sysdeps/x86_64/multiarch/ifunc-impl-list.c
+index bf171ea9b7..2b564e486d 100644
+--- a/sysdeps/x86_64/multiarch/ifunc-impl-list.c
++++ b/sysdeps/x86_64/multiarch/ifunc-impl-list.c
+@@ -957,7 +957,7 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 	      IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
+ 			      __memcpy_ssse3_v2)
+               IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
+-			      __memcpy_ssse3_v2)                            
++			      __memcpy_ssse3_v3)                            
+ 	      IFUNC_IMPL_ADD (array, i, memcpy,
+ 			      CPU_FEATURE_USABLE (AVX512F),
+ 			      __memcpy_avx512_no_vzeroupper)
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-large.S b/sysdeps/x86_64/multiarch/memmove-ssse3-large.S
+index 8dd7e81bd3..81080f304d 100644
+--- a/sysdeps/x86_64/multiarch/memmove-ssse3-large.S
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-large.S
+@@ -207,7 +207,7 @@ L(LB33_UBinf_H1_16):
+ 	andq	$-16, %rsi
+ 	movaps	(%rsi), %xmm1
+ 	movups	%xmm0, (%rdi)
+-#define SHARED_CACHE_SIZE_HALF	4096
++
+ #ifdef SHARED_CACHE_SIZE_HALF
+ 	cmp	$SHARED_CACHE_SIZE_HALF, %RDX_LP
+ #else
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-small.S b/sysdeps/x86_64/multiarch/memmove-ssse3-small.S
+index eb781b6b8f..c72b07e6bb 100644
+--- a/sysdeps/x86_64/multiarch/memmove-ssse3-small.S
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-small.S
+@@ -205,7 +205,7 @@ L(LB33_UBinf_H1_16):
+ 	andq	$-16, %rsi
+ 	movaps	(%rsi), %xmm1
+ 	movups	%xmm0, (%rdi)
+-#define SHARED_CACHE_SIZE_HALF	4096
++
+ #ifdef SHARED_CACHE_SIZE_HALF
+ 	cmp	$SHARED_CACHE_SIZE_HALF, %RDX_LP
+ #else
+-- 
+2.25.1
+

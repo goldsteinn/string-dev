@@ -1,0 +1,1097 @@
+From d9189d0dba5b9fc8b256f591fbd7f585bd178f08 Mon Sep 17 00:00:00 2001
+From: Noah Goldstein <goldstein.w.n@gmail.com>
+Date: Mon, 4 Apr 2022 23:46:21 -0500
+Subject: [PATCH v1 1/3] Benchmark
+
+---
+ benchtests/Makefile                           |  42 --
+ sysdeps/x86/sysdep.h                          |   2 +-
+ sysdeps/x86_64/multiarch/Makefile             |   4 +
+ sysdeps/x86_64/multiarch/ifunc-impl-list.c    |  16 +
+ .../x86_64/multiarch/memmove-ssse3-large.S    | 462 ++++++++++++++++++
+ .../x86_64/multiarch/memmove-ssse3-small.S    | 430 ++++++++++++++++
+ sysdeps/x86_64/multiarch/memmove-ssse3-v0.S   |   5 +
+ sysdeps/x86_64/multiarch/memmove-ssse3-v1.S   |   5 +
+ sysdeps/x86_64/multiarch/memmove-ssse3-v2.S   |   5 +
+ sysdeps/x86_64/multiarch/memmove-ssse3-v3.S   |   5 +
+ 10 files changed, 933 insertions(+), 43 deletions(-)
+ create mode 100644 sysdeps/x86_64/multiarch/memmove-ssse3-large.S
+ create mode 100644 sysdeps/x86_64/multiarch/memmove-ssse3-small.S
+ create mode 100644 sysdeps/x86_64/multiarch/memmove-ssse3-v0.S
+ create mode 100644 sysdeps/x86_64/multiarch/memmove-ssse3-v1.S
+ create mode 100644 sysdeps/x86_64/multiarch/memmove-ssse3-v2.S
+ create mode 100644 sysdeps/x86_64/multiarch/memmove-ssse3-v3.S
+
+diff --git a/benchtests/Makefile b/benchtests/Makefile
+index 8dfca592fd..f7ae61d257 100644
+--- a/benchtests/Makefile
++++ b/benchtests/Makefile
+@@ -119,55 +119,13 @@ endif
+ 
+ # String function benchmarks.
+ string-benchset := \
+-  bzero \
+-  bzero-large \
+-  bzero-walk \
+-  memccpy \
+-  memchr \
+-  memcmp \
+-  memcmpeq \
+   memcpy \
+   memcpy-large \
+   memcpy-random \
+   memcpy-walk \
+-  memmem \
+   memmove \
+   memmove-large \
+   memmove-walk \
+-  mempcpy \
+-  memrchr \
+-  memset \
+-  memset-large \
+-  memset-walk \
+-  memset-zero \
+-  memset-zero-large \
+-  memset-zero-walk \
+-  rawmemchr \
+-  stpcpy \
+-  stpcpy_chk \
+-  stpncpy \
+-  strcasecmp \
+-  strcasestr \
+-  strcat \
+-  strchr \
+-  strchrnul \
+-  strcmp \
+-  strcoll \
+-  strcpy \
+-  strcpy_chk \
+-  strcspn \
+-  strlen \
+-  strncasecmp \
+-  strncat \
+-  strncmp \
+-  strncpy \
+-  strnlen \
+-  strpbrk \
+-  strrchr \
+-  strsep \
+-  strspn \
+-  strstr \
+-  strtok \
+ # string-benchset
+ 
+ # Build and run locale-dependent benchmarks only if we're building natively.
+diff --git a/sysdeps/x86/sysdep.h b/sysdeps/x86/sysdep.h
+index 007a1eb13d..81b739526c 100644
+--- a/sysdeps/x86/sysdep.h
++++ b/sysdeps/x86/sysdep.h
+@@ -81,7 +81,7 @@ enum cf_protection_level
+ #define	ENTRY_P2ALIGN(name, alignment)					      \
+   .globl C_SYMBOL_NAME(name);						      \
+   .type C_SYMBOL_NAME(name),@function;					      \
+-  .align ALIGNARG(alignment);						      \
++  .align ALIGNARG(12);						      \
+   C_LABEL(name)								      \
+   cfi_startproc;							      \
+   _CET_ENDBR;								      \
+diff --git a/sysdeps/x86_64/multiarch/Makefile b/sysdeps/x86_64/multiarch/Makefile
+index 6507d1b7fa..849ec7f635 100644
+--- a/sysdeps/x86_64/multiarch/Makefile
++++ b/sysdeps/x86_64/multiarch/Makefile
+@@ -26,6 +26,10 @@ sysdep_routines += \
+   memmove-evex-unaligned-erms \
+   memmove-sse2-unaligned-erms \
+   memmove-ssse3 \
++  memmove-ssse3-v0 \
++  memmove-ssse3-v1 \
++  memmove-ssse3-v2 \
++  memmove-ssse3-v3 \
+   memmove-ssse3-back \
+   memrchr-avx2 \
+   memrchr-avx2-rtm \
+diff --git a/sysdeps/x86_64/multiarch/ifunc-impl-list.c b/sysdeps/x86_64/multiarch/ifunc-impl-list.c
+index 40cc6cc49e..bf171ea9b7 100644
+--- a/sysdeps/x86_64/multiarch/ifunc-impl-list.c
++++ b/sysdeps/x86_64/multiarch/ifunc-impl-list.c
+@@ -183,6 +183,14 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			      __memmove_ssse3_back)
+ 	      IFUNC_IMPL_ADD (array, i, memmove, CPU_FEATURE_USABLE (SSSE3),
+ 			      __memmove_ssse3)
++	      IFUNC_IMPL_ADD (array, i, memmove, CPU_FEATURE_USABLE (SSSE3),
++			      __memmove_ssse3_v0)
++	      IFUNC_IMPL_ADD (array, i, memmove, CPU_FEATURE_USABLE (SSSE3),
++			      __memmove_ssse3_v1)
++	      IFUNC_IMPL_ADD (array, i, memmove, CPU_FEATURE_USABLE (SSSE3),
++			      __memmove_ssse3_v2)
++	      IFUNC_IMPL_ADD (array, i, memmove, CPU_FEATURE_USABLE (SSSE3),
++			      __memmove_ssse3_v3)                            
+ 	      IFUNC_IMPL_ADD (array, i, memmove, 1, __memmove_erms)
+ 	      IFUNC_IMPL_ADD (array, i, memmove, 1,
+ 			      __memmove_sse2_unaligned)
+@@ -942,6 +950,14 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
+ 			      __memcpy_ssse3_back)
+ 	      IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
+ 			      __memcpy_ssse3)
++	      IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
++			      __memcpy_ssse3_v0)
++	      IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
++			      __memcpy_ssse3_v1)
++	      IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
++			      __memcpy_ssse3_v2)
++              IFUNC_IMPL_ADD (array, i, memcpy, CPU_FEATURE_USABLE (SSSE3),
++			      __memcpy_ssse3_v2)                            
+ 	      IFUNC_IMPL_ADD (array, i, memcpy,
+ 			      CPU_FEATURE_USABLE (AVX512F),
+ 			      __memcpy_avx512_no_vzeroupper)
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-large.S b/sysdeps/x86_64/multiarch/memmove-ssse3-large.S
+new file mode 100644
+index 0000000000..8dd7e81bd3
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-large.S
+@@ -0,0 +1,462 @@
++#include <sysdep.h>
++
++#ifndef V0
++# error "ABC"
++#endif
++
++	.section .text.ssse3, "ax", @progbits
++ENTRY_P2ALIGN(MEMMOVE, 6)
++#if V0
++	movq	%rdi, %rax
++	// Range       : [0, 18446744073709551615]
++	// % Of Calls  : 100.0
++	// branch      : T = 25.24, NT = 74.76
++	cmpq	$16, %rdx
++	jb	L(LB0_UB15)
++
++	// Range       : [16, 18446744073709551615]
++	// % Of Calls  : 74.76
++	// branch      : T = 31.0, NT = 69.0
++	movups	0(%rsi), %xmm0
++	movups	-16(%rsi, %rdx), %xmm7
++	cmpq	$32, %rdx
++	ja	L(LB33_UBinf_H1_16)
++
++	// Range       : [16, 32]
++	// % Of Calls  : 51.58
++	// copy        :
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm7, -16(%rdi, %rdx)
++	ret
++
++	// Range       : [0, 15]
++	// % Of Calls  : 25.24
++	// branch      : T = 17.68, NT = 82.32
++	.p2align 4,, 4
++L(LB0_UB15):
++	cmpl	$4, %edx
++	jb	L(LB0_UB3)
++	cmpl	$8, %edx
++	jb	L(copy_4)
++	movq	0(%rsi), %rcx
++	movq	-8(%rsi, %rdx), %rsi
++	movq	%rcx, 0(%rdi)
++	movq	%rsi, -8(%rdi, %rdx)
++	ret
++
++    nop
++L(copy_4):
++	movl	0(%rsi), %ecx
++	movl	-4(%rsi, %rdx), %esi
++	movl	%ecx, 0(%rdi)
++	movl	%esi, -4(%rdi, %rdx)
++	ret
++
++
++	// Range       : [0, 3]
++	// % Of Calls  : 1.94
++	// branch      : T = 23.47, NT = 76.53
++	.p2align 4,, 4
++L(LB0_UB3):
++	decl	%edx
++	jl	L(LB0_UB0)
++	movb	(%rsi), %cl
++	je	L(LB0_UB1)
++	// Range       : [2, 3]
++	// % Of Calls  : 1.49
++	// copy        :
++	movzwl	-1(%rsi, %rdx), %esi
++	movw	%si, -1(%rdi, %rdx)
++L(LB0_UB1):
++	movb	%cl, (%rdi)
++L(LB0_UB0):
++	ret
++
++
++	// Range       : [33, 64]
++	// % Of Calls  : 0.86
++	// copy        :
++	.p2align 4,, 4
++L(LB33_UB64_H1_16):
++	movups	16(%rsi), %xmm1
++	movups	-32(%rsi, %rdx), %xmm2
++
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm1, 16(%rdi)
++	movups	%xmm2, -32(%rdi, %rdx)
++	movups	%xmm7, -16(%rdi, %rdx)
++L(nop):
++	ret
++#else
++	movq	%rdi, %rax
++	// Range       : [0, 18446744073709551615]
++	// % Of Calls  : 100.0
++	// branch      : T = 25.24, NT = 74.76
++	cmpq	$16, %rdx
++	jb	L(LB0_UB15)
++
++	// Range       : [16, 18446744073709551615]
++	// % Of Calls  : 74.76
++	// branch      : T = 31.0, NT = 69.0
++	movups	0(%rsi), %xmm0
++	movups	-16(%rsi, %rdx), %xmm7
++	cmpq	$32, %rdx
++	ja	L(LB33_UBinf_H1_16)
++
++	// Range       : [16, 32]
++	// % Of Calls  : 51.58
++	// copy        :
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm7, -16(%rdi, %rdx)
++	ret
++
++	// Range       : [33, 64]
++	// % Of Calls  : 0.86
++	// copy        :
++	.p2align 4,, 4
++L(LB33_UB64_H1_16):
++	movups	16(%rsi), %xmm1
++	movups	-32(%rsi, %rdx), %xmm2
++
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm1, 16(%rdi)
++	movups	%xmm2, -32(%rdi, %rdx)
++	movups	%xmm7, -16(%rdi, %rdx)
++	ret
++
++	// Range       : [0, 15]
++	// % Of Calls  : 25.24
++	// branch      : T = 17.68, NT = 82.32
++	.p2align 4,, 4
++L(LB0_UB15):
++	cmpl	$8, %edx
++	ja	L(LB9_UB15)
++
++	// Range       : [0, 8]
++	// % Of Calls  : 20.78
++	// branch      : T = 9.36, NT = 90.64
++	cmpl	$4, %edx
++	jb	L(LB0_UB3)
++
++	// Range       : [4, 8]
++	// % Of Calls  : 18.84
++	// copy        :
++	movl	0(%rsi), %ecx
++	movl	-4(%rsi, %rdx), %esi
++	movl	%ecx, 0(%rdi)
++	movl	%esi, -4(%rdi, %rdx)
++	ret
++
++	// Range       : [9, 15]
++	// % Of Calls  : 4.46
++	// copy        :
++	.p2align 4,, 4
++L(LB9_UB15):
++	movq	0(%rsi), %rcx
++	movq	-8(%rsi, %rdx), %rsi
++	movq	%rcx, 0(%rdi)
++	movq	%rsi, -8(%rdi, %rdx)
++	ret
++
++	// Range       : [0, 3]
++	// % Of Calls  : 1.94
++	// branch      : T = 23.47, NT = 76.53
++	.p2align 4,, 4
++L(LB0_UB3):
++	cmpl	$1, %edx
++	jl	L(LB0_UB0)
++	movzbl	(%rsi), %ecx
++	je	L(LB0_UB1)
++	// Range       : [2, 3]
++	// % Of Calls  : 1.49
++	// copy        :
++	movzwl	-2(%rsi, %rdx), %esi
++	movw	%si, -2(%rdi, %rdx)
++L(LB0_UB1):
++	movb	%cl, (%rdi)
++L(LB0_UB0):
++L(nop):
++	ret
++#endif
++
++	// Range       : [33, 18446744073709551615]
++	// % Of Calls  : 23.17
++	// branch      : T = 3.72, NT = 96.28
++	.p2align 4,, 4
++L(LB33_UBinf_H1_16):
++	cmpq	$64, %rdx
++	jbe	L(LB33_UB64_H1_16)
++
++
++
++	/* We use rcx later to get alignr value.  */
++	movq	%rdi, %rcx
++
++	/* For memmove safety.  */
++	subq	%rsi, %rcx
++	cmpq	%rdx, %rcx
++	jb	L(copy_backward)
++	/* -16(%rsi, %rdx) already loaded into xmm7.  */
++	movups	-32(%rsi, %rdx), %xmm8
++	movups	-48(%rsi, %rdx), %xmm9
++
++	andl	$0xf, %ecx
++
++	movq	%rsi, %r9
++	addq	%rcx, %rsi
++	andq	$-16, %rsi
++	movaps	(%rsi), %xmm1
++	movups	%xmm0, (%rdi)
++#define SHARED_CACHE_SIZE_HALF	4096
++#ifdef SHARED_CACHE_SIZE_HALF
++	cmp	$SHARED_CACHE_SIZE_HALF, %RDX_LP
++#else
++	cmp	__x86_shared_cache_size_half(%rip), %rdx
++#endif
++	ja	L(large_memcpy)
++
++	leaq	-64(%rdi, %rdx), %r8
++	andq	$-16, %rdi
++	movl	$48, %edx
++
++	leaq	L(loop_fwd_start)(%rip), %r9
++	sall	$6, %ecx
++	addq	%r9, %rcx
++	jmp	* %rcx
++
++
++L(copy_backward):
++	testq	%rcx, %rcx
++	jz	L(nop)
++	movups	16(%rsi), %xmm4
++	movups	32(%rsi), %xmm5
++
++	movq	%rdi, %r8
++	subq	%rdi, %rsi
++	leaq	-49(%rdi, %rdx), %rdi
++	andq	$-16, %rdi
++	addq	%rdi, %rsi
++	andq	$-16, %rsi
++
++	movaps	48(%rsi), %xmm6
++
++
++	leaq	L(loop_bkwd_start)(%rip), %r9
++	andl	$0xf, %ecx
++	sall	$6, %ecx
++	addq	%r9, %rcx
++	jmp	* %rcx
++
++
++L(large_memcpy):
++	movups	-64(%r9, %rdx), %xmm10
++	movups	-80(%r9, %rdx), %xmm11
++
++	sall	$5, %ecx
++	leal	(%rcx, %rcx, 2), %r8d
++	leaq	-96(%rdi, %rdx), %rcx
++	andq	$-16, %rdi
++	leaq	L(large_loop_fwd_start)(%rip), %rdx
++	addq	%r8, %rdx
++	jmp	* %rdx
++
++
++	/* Instead of a typical jump table all 16 loops are exactly
++	   64-bytes in size. So, we can just jump to first loop + r8 *
++	   64. Before modifying any loop ensure all their sizes match!
++	 */
++	.p2align 6
++L(loop_fwd_start):
++L(loop_fwd_0x0):
++	movaps	16(%rsi), %xmm1
++	movaps	32(%rsi), %xmm2
++	movaps	48(%rsi), %xmm3
++	movaps	%xmm1, 16(%rdi)
++	movaps	%xmm2, 32(%rdi)
++	movaps	%xmm3, 48(%rdi)
++	addq	%rdx, %rdi
++	addq	%rdx, %rsi
++	cmpq	%rdi, %r8
++	ja	L(loop_fwd_0x0)
++L(end_loop_fwd):
++	movups	%xmm9, 16(%r8)
++	movups	%xmm8, 32(%r8)
++	movups	%xmm7, 48(%r8)
++	ret
++
++	/* Extactly 64 bytes if `jmp L(end_loop_fwd)` is long encoding.
++	   60 bytes otherwise.  */
++#define ALIGNED_LOOP_FWD(align_by);	\
++	.p2align 6;	\
++L(loop_fwd_ ## align_by):	\
++	movaps	16(%rsi), %xmm0;	\
++	movaps	32(%rsi), %xmm2;	\
++	movaps	48(%rsi), %xmm3;	\
++	movaps	%xmm3, %xmm4;	\
++	palignr	$align_by, %xmm2, %xmm3;	\
++	palignr	$align_by, %xmm0, %xmm2;	\
++	palignr	$align_by, %xmm1, %xmm0;	\
++	movaps	%xmm4, %xmm1;	\
++	movaps	%xmm0, 16(%rdi);	\
++	movaps	%xmm2, 32(%rdi);	\
++	movaps	%xmm3, 48(%rdi);	\
++	addq	%rdx, %rdi;	\
++	addq	%rdx, %rsi;	\
++	cmpq	%rdi, %r8;	\
++	ja	L(loop_fwd_ ## align_by);	\
++	jmp	L(end_loop_fwd);
++
++	ALIGNED_LOOP_FWD (0xf)
++	ALIGNED_LOOP_FWD (0xe)
++	ALIGNED_LOOP_FWD (0xd)
++	ALIGNED_LOOP_FWD (0xc)
++	ALIGNED_LOOP_FWD (0xb)
++	ALIGNED_LOOP_FWD (0xa)
++	ALIGNED_LOOP_FWD (0x9)
++	ALIGNED_LOOP_FWD (0x8)
++	ALIGNED_LOOP_FWD (0x7)
++	ALIGNED_LOOP_FWD (0x6)
++	ALIGNED_LOOP_FWD (0x5)
++	ALIGNED_LOOP_FWD (0x4)
++	ALIGNED_LOOP_FWD (0x3)
++	ALIGNED_LOOP_FWD (0x2)
++	ALIGNED_LOOP_FWD (0x1)
++
++	.p2align 6
++L(large_loop_fwd_start):
++L(large_loop_fwd_0x0):
++	movaps	16(%rsi), %xmm1
++	movaps	32(%rsi), %xmm2
++	movaps	48(%rsi), %xmm3
++	movaps	64(%rsi), %xmm4
++	movaps	80(%rsi), %xmm5
++	movntps	%xmm1, 16(%rdi)
++	movntps	%xmm2, 32(%rdi)
++	movntps	%xmm3, 48(%rdi)
++	movntps	%xmm4, 64(%rdi)
++	movntps	%xmm5, 80(%rdi)
++	addq	$80, %rdi
++	addq	$80, %rsi
++	cmpq	%rdi, %rcx
++	ja	L(large_loop_fwd_0x0)
++
++	/* Ensure no cache line split on tail.  */
++	.p2align 4
++L(end_large_loop_fwd):
++	sfence
++	movups	%xmm11, 16(%rcx)
++	movups	%xmm10, 32(%rcx)
++	movups	%xmm9, 48(%rcx)
++	movups	%xmm8, 64(%rcx)
++	movups	%xmm7, 80(%rcx)
++	ret
++
++
++	/* Size > 64 bytes and <= 96 bytes. 32-byte align between ensure
++	   96-byte spacing between each.  */
++#define ALIGNED_LARGE_LOOP_FWD(align_by);	\
++	.p2align 5;	\
++L(large_loop_fwd_ ## align_by):	\
++	movaps	16(%rsi), %xmm0;	\
++	movaps	32(%rsi), %xmm2;	\
++	movaps	48(%rsi), %xmm3;	\
++	movaps	64(%rsi), %xmm4;	\
++	movaps	80(%rsi), %xmm5;	\
++	movaps	%xmm5, %xmm6;	\
++	palignr	$align_by, %xmm4, %xmm5;	\
++	palignr	$align_by, %xmm3, %xmm4;	\
++	palignr	$align_by, %xmm2, %xmm3;	\
++	palignr	$align_by, %xmm0, %xmm2;	\
++	palignr	$align_by, %xmm1, %xmm0;	\
++	movaps	%xmm6, %xmm1;	\
++	movntps	%xmm0, 16(%rdi);	\
++	movntps	%xmm2, 32(%rdi);	\
++	movntps	%xmm3, 48(%rdi);	\
++	movntps	%xmm4, 64(%rdi);	\
++	movntps	%xmm5, 80(%rdi);	\
++	addq	$80, %rdi;	\
++	addq	$80, %rsi;	\
++	cmpq	%rdi, %rcx;	\
++	ja	L(large_loop_fwd_ ## align_by);	\
++	jmp	L(end_large_loop_fwd);
++
++
++
++	ALIGNED_LARGE_LOOP_FWD (0xf)
++	ALIGNED_LARGE_LOOP_FWD (0xe)
++	ALIGNED_LARGE_LOOP_FWD (0xd)
++	ALIGNED_LARGE_LOOP_FWD (0xc)
++	ALIGNED_LARGE_LOOP_FWD (0xb)
++	ALIGNED_LARGE_LOOP_FWD (0xa)
++	ALIGNED_LARGE_LOOP_FWD (0x9)
++	ALIGNED_LARGE_LOOP_FWD (0x8)
++	ALIGNED_LARGE_LOOP_FWD (0x7)
++	ALIGNED_LARGE_LOOP_FWD (0x6)
++	ALIGNED_LARGE_LOOP_FWD (0x5)
++	ALIGNED_LARGE_LOOP_FWD (0x4)
++	ALIGNED_LARGE_LOOP_FWD (0x3)
++	ALIGNED_LARGE_LOOP_FWD (0x2)
++	ALIGNED_LARGE_LOOP_FWD (0x1)
++
++
++	.p2align 6
++L(loop_bkwd_start):
++L(loop_bkwd_0x0):
++	movaps	32(%rsi), %xmm1
++	movaps	16(%rsi), %xmm2
++	movaps	0(%rsi), %xmm3
++	movaps	%xmm1, 32(%rdi)
++	movaps	%xmm2, 16(%rdi)
++	movaps	%xmm3, 0(%rdi)
++	subq	$48, %rdi
++	subq	$48, %rsi
++	cmpq	%rdi, %r8
++	jb	L(loop_bkwd_0x0)
++L(end_loop_bkwd):
++	movups	%xmm7, -16(%r8, %rdx)
++	movups	%xmm0, 0(%r8)
++	movups	%xmm4, 16(%r8)
++	movups	%xmm5, 32(%r8)
++
++	ret
++
++
++	/* Extactly 64 bytes if `jmp L(end_loop_bkwd)` is long encoding.
++	   60 bytes otherwise.  */
++#define ALIGNED_LOOP_BKWD(align_by);	\
++	.p2align 6;	\
++L(loop_bkwd_ ## align_by):	\
++	movaps	32(%rsi), %xmm1;	\
++	movaps	16(%rsi), %xmm2;	\
++	movaps	0(%rsi), %xmm3;	\
++	palignr	$align_by, %xmm1, %xmm6;	\
++	palignr	$align_by, %xmm2, %xmm1;	\
++	palignr	$align_by, %xmm3, %xmm2;	\
++	movaps	%xmm6, 32(%rdi);	\
++	movaps	%xmm1, 16(%rdi);	\
++	movaps	%xmm2, 0(%rdi);	\
++	subq	$48, %rdi;	\
++	subq	$48, %rsi;	\
++	movaps	%xmm3, %xmm6;	\
++	cmpq	%rdi, %r8;	\
++	jb	L(loop_bkwd_ ## align_by);	\
++	jmp	L(end_loop_bkwd);
++
++
++	ALIGNED_LOOP_BKWD (0xf)
++	ALIGNED_LOOP_BKWD (0xe)
++	ALIGNED_LOOP_BKWD (0xd)
++	ALIGNED_LOOP_BKWD (0xc)
++	ALIGNED_LOOP_BKWD (0xb)
++	ALIGNED_LOOP_BKWD (0xa)
++	ALIGNED_LOOP_BKWD (0x9)
++	ALIGNED_LOOP_BKWD (0x8)
++	ALIGNED_LOOP_BKWD (0x7)
++	ALIGNED_LOOP_BKWD (0x6)
++	ALIGNED_LOOP_BKWD (0x5)
++	ALIGNED_LOOP_BKWD (0x4)
++	ALIGNED_LOOP_BKWD (0x3)
++	ALIGNED_LOOP_BKWD (0x2)
++	ALIGNED_LOOP_BKWD (0x1)
++END(MEMMOVE)
++	strong_alias (MEMMOVE, MEMCPY)
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-small.S b/sysdeps/x86_64/multiarch/memmove-ssse3-small.S
+new file mode 100644
+index 0000000000..eb781b6b8f
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-small.S
+@@ -0,0 +1,430 @@
++#include <sysdep.h>
++
++#ifndef V0
++# error "ABC"
++#endif
++
++	.section .text.ssse3, "ax", @progbits
++ENTRY_P2ALIGN(MEMMOVE, 6)
++#if V0
++	movq	%rdi, %rax
++	// Range       : [0, 18446744073709551615]
++	// % Of Calls  : 100.0
++	// branch      : T = 25.24, NT = 74.76
++	cmpq	$16, %rdx
++	jb	L(LB0_UB15)
++
++	// Range       : [16, 18446744073709551615]
++	// % Of Calls  : 74.76
++	// branch      : T = 31.0, NT = 69.0
++	movups	0(%rsi), %xmm0
++	movups	-16(%rsi, %rdx), %xmm7
++	cmpq	$32, %rdx
++	ja	L(LB33_UBinf_H1_16)
++
++	// Range       : [16, 32]
++	// % Of Calls  : 51.58
++	// copy        :
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm7, -16(%rdi, %rdx)
++	ret
++
++	// Range       : [0, 15]
++	// % Of Calls  : 25.24
++	// branch      : T = 17.68, NT = 82.32
++	.p2align 4,, 4
++L(LB0_UB15):
++	cmpl	$4, %edx
++	jb	L(LB0_UB3)
++	cmpl	$8, %edx
++	jb	L(copy_4)
++	movq	0(%rsi), %rcx
++	movq	-8(%rsi, %rdx), %rsi
++	movq	%rcx, 0(%rdi)
++	movq	%rsi, -8(%rdi, %rdx)
++	ret
++
++    nop
++L(copy_4):
++	movl	0(%rsi), %ecx
++	movl	-4(%rsi, %rdx), %esi
++	movl	%ecx, 0(%rdi)
++	movl	%esi, -4(%rdi, %rdx)
++	ret
++
++
++	// Range       : [0, 3]
++	// % Of Calls  : 1.94
++	// branch      : T = 23.47, NT = 76.53
++	.p2align 4,, 4
++L(LB0_UB3):
++	decl	%edx
++	jl	L(LB0_UB0)
++	movb	(%rsi), %cl
++	je	L(LB0_UB1)
++	// Range       : [2, 3]
++	// % Of Calls  : 1.49
++	// copy        :
++	movzwl	-1(%rsi, %rdx), %esi
++	movw	%si, -1(%rdi, %rdx)
++L(LB0_UB1):
++	movb	%cl, (%rdi)
++L(LB0_UB0):
++	ret
++
++
++	// Range       : [33, 64]
++	// % Of Calls  : 0.86
++	// copy        :
++	.p2align 4,, 4
++L(LB33_UB64_H1_16):
++	movups	16(%rsi), %xmm1
++	movups	-32(%rsi, %rdx), %xmm2
++
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm1, 16(%rdi)
++	movups	%xmm2, -32(%rdi, %rdx)
++	movups	%xmm7, -16(%rdi, %rdx)
++	ret
++#else
++	movq	%rdi, %rax
++	// Range       : [0, 18446744073709551615]
++	// % Of Calls  : 100.0
++	// branch      : T = 25.24, NT = 74.76
++	cmpq	$16, %rdx
++	jb	L(LB0_UB15)
++
++	// Range       : [16, 18446744073709551615]
++	// % Of Calls  : 74.76
++	// branch      : T = 31.0, NT = 69.0
++	movups	0(%rsi), %xmm0
++	movups	-16(%rsi, %rdx), %xmm7
++	cmpq	$32, %rdx
++	ja	L(LB33_UBinf_H1_16)
++
++	// Range       : [16, 32]
++	// % Of Calls  : 51.58
++	// copy        :
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm7, -16(%rdi, %rdx)
++	ret
++
++	// Range       : [33, 64]
++	// % Of Calls  : 0.86
++	// copy        :
++	.p2align 4,, 4
++L(LB33_UB64_H1_16):
++	movups	16(%rsi), %xmm1
++	movups	-32(%rsi, %rdx), %xmm2
++
++	movups	%xmm0, 0(%rdi)
++	movups	%xmm1, 16(%rdi)
++	movups	%xmm2, -32(%rdi, %rdx)
++	movups	%xmm7, -16(%rdi, %rdx)
++	ret
++
++	// Range       : [0, 15]
++	// % Of Calls  : 25.24
++	// branch      : T = 17.68, NT = 82.32
++	.p2align 4,, 4
++L(LB0_UB15):
++	cmpl	$8, %edx
++	ja	L(LB9_UB15)
++
++	// Range       : [0, 8]
++	// % Of Calls  : 20.78
++	// branch      : T = 9.36, NT = 90.64
++	cmpl	$4, %edx
++	jb	L(LB0_UB3)
++
++	// Range       : [4, 8]
++	// % Of Calls  : 18.84
++	// copy        :
++	movl	0(%rsi), %ecx
++	movl	-4(%rsi, %rdx), %esi
++	movl	%ecx, 0(%rdi)
++	movl	%esi, -4(%rdi, %rdx)
++	ret
++
++	// Range       : [9, 15]
++	// % Of Calls  : 4.46
++	// copy        :
++	.p2align 4,, 4
++L(LB9_UB15):
++	movq	0(%rsi), %rcx
++	movq	-8(%rsi, %rdx), %rsi
++	movq	%rcx, 0(%rdi)
++	movq	%rsi, -8(%rdi, %rdx)
++	ret
++
++	// Range       : [0, 3]
++	// % Of Calls  : 1.94
++	// branch      : T = 23.47, NT = 76.53
++	.p2align 4,, 4
++L(LB0_UB3):
++	cmpl	$1, %edx
++	jl	L(LB0_UB0)
++	movzbl	(%rsi), %ecx
++	je	L(LB0_UB1)
++	// Range       : [2, 3]
++	// % Of Calls  : 1.49
++	// copy        :
++	movzwl	-2(%rsi, %rdx), %esi
++	movw	%si, -2(%rdi, %rdx)
++L(LB0_UB1):
++	movb	%cl, (%rdi)
++L(LB0_UB0):
++	ret
++#endif
++
++	// Range       : [33, 18446744073709551615]
++	// % Of Calls  : 23.17
++	// branch      : T = 3.72, NT = 96.28
++	.p2align 4,, 4
++L(LB33_UBinf_H1_16):
++	cmpq	$64, %rdx
++	jbe	L(LB33_UB64_H1_16)
++
++
++
++	/* We use rcx later to get alignr value.  */
++	movq	%rdi, %rcx
++
++	/* For memmove safety.  */
++	subq	%rsi, %rcx
++	cmpq	%rdx, %rcx
++	jb	L(copy_backward)
++	/* -16(%rsi, %rdx) already loaded into xmm7.  */
++	movups	-32(%rsi, %rdx), %xmm8
++	movups	-48(%rsi, %rdx), %xmm9
++
++	andl	$0xf, %ecx
++
++	movq	%rsi, %r9
++	addq	%rcx, %rsi
++	andq	$-16, %rsi
++	movaps	(%rsi), %xmm1
++	movups	%xmm0, (%rdi)
++#define SHARED_CACHE_SIZE_HALF	4096
++#ifdef SHARED_CACHE_SIZE_HALF
++	cmp	$SHARED_CACHE_SIZE_HALF, %RDX_LP
++#else
++	cmp	__x86_shared_cache_size_half(%rip), %rdx
++#endif
++	ja	L(large_memcpy)
++
++	leaq	-64(%rdi, %rdx), %r8
++	andq	$-16, %rdi
++	movl	$48, %edx
++
++	leaq	L(loop_fwd_start)(%rip), %r9
++	sall	$6, %ecx
++	addq	%r9, %rcx
++	jmp	* %rcx
++
++
++L(large_memcpy):
++	movups	-64(%r9, %rdx), %xmm10
++	movups	-80(%r9, %rdx), %xmm11
++
++	sall	$5, %ecx
++	leal	(%rcx, %rcx, 2), %r8d
++	leaq	-96(%rdi, %rdx), %rcx
++	andq	$-16, %rdi
++	leaq	L(large_loop_fwd_start)(%rip), %rdx
++	addq	%r8, %rdx
++	jmp	* %rdx
++
++	.p2align 4
++L(copy_backward):
++	testq	%rcx, %rcx
++	jz	L(nop)
++
++	movups	16(%rsi), %xmm5
++	movups	32(%rsi), %xmm6
++
++	subq	%rdi, %rsi
++	leaq	-49(%rdi, %rdx), %rcx
++	andq	$-16, %rcx
++	addq	%rcx, %rsi
++	.p2align 4
++L(loop_backward):
++	movups	32(%rsi), %xmm2
++	movups	16(%rsi), %xmm3
++	movups	0(%rsi), %xmm4
++	movaps	%xmm2, 32(%rcx)
++	movaps	%xmm3, 16(%rcx)
++	movaps	%xmm4, 0(%rcx)
++	subq	$48, %rcx
++	subq	$48, %rsi
++	cmpq	%rcx, %rdi
++	jb	L(loop_backward)
++	movups	%xmm0, (%rdi)
++	movups	%xmm5, 16(%rdi)
++	movups	%xmm6, 32(%rdi)
++	movups	%xmm7, -16(%rdi, %rdx)
++L(nop):
++	ret
++
++
++
++	/* Instead of a typical jump table all 16 loops are exactly
++	   64-bytes in size. So, we can just jump to first loop + r8 *
++	   64. Before modifying any loop ensure all their sizes match!
++	 */
++	.p2align 6
++L(loop_fwd_start):
++L(loop_fwd_0x0):
++	movaps	16(%rsi), %xmm1
++	movaps	32(%rsi), %xmm2
++	movaps	48(%rsi), %xmm3
++	movaps	%xmm1, 16(%rdi)
++	movaps	%xmm2, 32(%rdi)
++	movaps	%xmm3, 48(%rdi)
++	addq	%rdx, %rdi
++	addq	%rdx, %rsi
++	cmpq	%rdi, %r8
++	ja	L(loop_fwd_0x0)
++L(end_loop_fwd):
++	movups	%xmm9, 16(%r8)
++	movups	%xmm8, 32(%r8)
++	movups	%xmm7, 48(%r8)
++	ret
++
++	/* Extactly 64 bytes if `jmp L(end_loop_fwd)` is long encoding.
++	   60 bytes otherwise.  */
++#define ALIGNED_LOOP_FWD(align_by);	\
++	.p2align 6;	\
++L(loop_fwd_ ## align_by):	\
++	movaps	16(%rsi), %xmm0;	\
++	movaps	32(%rsi), %xmm2;	\
++	movaps	48(%rsi), %xmm3;	\
++	movaps	%xmm3, %xmm4;	\
++	palignr	$align_by, %xmm2, %xmm3;	\
++	palignr	$align_by, %xmm0, %xmm2;	\
++	palignr	$align_by, %xmm1, %xmm0;	\
++	movaps	%xmm4, %xmm1;	\
++	movaps	%xmm0, 16(%rdi);	\
++	movaps	%xmm2, 32(%rdi);	\
++	movaps	%xmm3, 48(%rdi);	\
++	addq	%rdx, %rdi;	\
++	addq	%rdx, %rsi;	\
++	cmpq	%rdi, %r8;	\
++	ja	L(loop_fwd_ ## align_by);	\
++	jmp	L(end_loop_fwd);
++
++	ALIGNED_LOOP_FWD (0xf)
++	ALIGNED_LOOP_FWD (0xe)
++	ALIGNED_LOOP_FWD (0xd)
++	ALIGNED_LOOP_FWD (0xc)
++	ALIGNED_LOOP_FWD (0xb)
++	ALIGNED_LOOP_FWD (0xa)
++	ALIGNED_LOOP_FWD (0x9)
++	ALIGNED_LOOP_FWD (0x8)
++	ALIGNED_LOOP_FWD (0x7)
++	ALIGNED_LOOP_FWD (0x6)
++	ALIGNED_LOOP_FWD (0x5)
++	ALIGNED_LOOP_FWD (0x4)
++	ALIGNED_LOOP_FWD (0x3)
++	ALIGNED_LOOP_FWD (0x2)
++	ALIGNED_LOOP_FWD (0x1)
++
++	.p2align 6
++L(large_loop_fwd_start):
++L(large_loop_fwd_0x0):
++	movaps	16(%rsi), %xmm1
++	movaps	32(%rsi), %xmm2
++	movaps	48(%rsi), %xmm3
++	movaps	64(%rsi), %xmm4
++	movaps	80(%rsi), %xmm5
++	movntps	%xmm1, 16(%rdi)
++	movntps	%xmm2, 32(%rdi)
++	movntps	%xmm3, 48(%rdi)
++	movntps	%xmm4, 64(%rdi)
++	movntps	%xmm5, 80(%rdi)
++	addq	$80, %rdi
++	addq	$80, %rsi
++	cmpq	%rdi, %rcx
++	ja	L(large_loop_fwd_0x0)
++
++	/* Ensure no cache line split on tail.  */
++	.p2align 4
++L(end_large_loop_fwd):
++	sfence
++	movups	%xmm11, 16(%rcx)
++	movups	%xmm10, 32(%rcx)
++	movups	%xmm9, 48(%rcx)
++	movups	%xmm8, 64(%rcx)
++	movups	%xmm7, 80(%rcx)
++	ret
++
++
++	/* Size > 64 bytes and <= 96 bytes. 32-byte align between ensure
++	   96-byte spacing between each.  */
++#define ALIGNED_LARGE_LOOP_FWD(align_by);	\
++	.p2align 5;	\
++L(large_loop_fwd_ ## align_by):	\
++	movaps	16(%rsi), %xmm0;	\
++	movaps	32(%rsi), %xmm2;	\
++	movaps	48(%rsi), %xmm3;	\
++	movaps	64(%rsi), %xmm4;	\
++	movaps	80(%rsi), %xmm5;	\
++	movaps	%xmm5, %xmm6;	\
++	palignr	$align_by, %xmm4, %xmm5;	\
++	palignr	$align_by, %xmm3, %xmm4;	\
++	palignr	$align_by, %xmm2, %xmm3;	\
++	palignr	$align_by, %xmm0, %xmm2;	\
++	palignr	$align_by, %xmm1, %xmm0;	\
++	movaps	%xmm6, %xmm1;	\
++	movntps	%xmm0, 16(%rdi);	\
++	movntps	%xmm2, 32(%rdi);	\
++	movntps	%xmm3, 48(%rdi);	\
++	movntps	%xmm4, 64(%rdi);	\
++	movntps	%xmm5, 80(%rdi);	\
++	addq	$80, %rdi;	\
++	addq	$80, %rsi;	\
++	cmpq	%rdi, %rcx;	\
++	ja	L(large_loop_fwd_ ## align_by);	\
++	jmp	L(end_large_loop_fwd);
++
++
++
++	ALIGNED_LARGE_LOOP_FWD (0xf)
++	ALIGNED_LARGE_LOOP_FWD (0xe)
++	ALIGNED_LARGE_LOOP_FWD (0xd)
++	ALIGNED_LARGE_LOOP_FWD (0xc)
++	ALIGNED_LARGE_LOOP_FWD (0xb)
++	ALIGNED_LARGE_LOOP_FWD (0xa)
++	ALIGNED_LARGE_LOOP_FWD (0x9)
++	ALIGNED_LARGE_LOOP_FWD (0x8)
++	ALIGNED_LARGE_LOOP_FWD (0x7)
++	ALIGNED_LARGE_LOOP_FWD (0x6)
++	ALIGNED_LARGE_LOOP_FWD (0x5)
++	ALIGNED_LARGE_LOOP_FWD (0x4)
++	ALIGNED_LARGE_LOOP_FWD (0x3)
++	ALIGNED_LARGE_LOOP_FWD (0x2)
++	ALIGNED_LARGE_LOOP_FWD (0x1)
++
++
++	.p2align 6
++L(loop_bkwd_start):
++L(loop_bkwd_0x0):
++	movaps	-16(%rsi), %xmm1
++	movaps	-32(%rsi), %xmm2
++	movaps	-48(%rsi), %xmm3
++	movaps	%xmm1, -16(%rdi)
++	movaps	%xmm2, -32(%rdi)
++	movaps	%xmm3, -48(%rdi)
++	subq	$48, %rdi
++	subq	$48, %rsi
++	cmpq	%rdi, %r8
++	jb	L(loop_bkwd_0x0)
++L(end_loop_bkwd):
++	movups	%xmm7, -64(%r8, %rdx)
++	movups	%xmm0, -48(%r8)
++	movups	%xmm8, -32(%r8)
++	movups	%xmm9, -16(%r8)
++
++	ret
++END(MEMMOVE)
++	strong_alias (MEMMOVE, MEMCPY)
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-v0.S b/sysdeps/x86_64/multiarch/memmove-ssse3-v0.S
+new file mode 100644
+index 0000000000..e699ed0ee9
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-v0.S
+@@ -0,0 +1,5 @@
++#define MEMMOVE	__memmove_ssse3_v0
++#define MEMCPY	__memcpy_ssse3_v0
++
++#define V0	1
++#include "memmove-ssse3-large.S"
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-v1.S b/sysdeps/x86_64/multiarch/memmove-ssse3-v1.S
+new file mode 100644
+index 0000000000..9661e5c879
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-v1.S
+@@ -0,0 +1,5 @@
++#define MEMMOVE	__memmove_ssse3_v1
++#define MEMCPY	__memcpy_ssse3_v1
++
++#define V0	0
++#include "memmove-ssse3-large.S"
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-v2.S b/sysdeps/x86_64/multiarch/memmove-ssse3-v2.S
+new file mode 100644
+index 0000000000..5b5c01c01d
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-v2.S
+@@ -0,0 +1,5 @@
++#define MEMMOVE	__memmove_ssse3_v2
++#define MEMCPY	__memcpy_ssse3_v2
++
++#define V0	1
++#include "memmove-ssse3-small.S"
+diff --git a/sysdeps/x86_64/multiarch/memmove-ssse3-v3.S b/sysdeps/x86_64/multiarch/memmove-ssse3-v3.S
+new file mode 100644
+index 0000000000..823f48219c
+--- /dev/null
++++ b/sysdeps/x86_64/multiarch/memmove-ssse3-v3.S
+@@ -0,0 +1,5 @@
++#define MEMMOVE	__memmove_ssse3_v3
++#define MEMCPY	__memcpy_ssse3_v3
++
++#define V0	0
++#include "memmove-ssse3-small.S"
+-- 
+2.25.1
+
