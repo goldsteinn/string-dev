@@ -15,9 +15,9 @@
     APPLY(fwd_decl, ;, __VA_ARGS__);                                           \
     extern const decl_type decl_name; /* for c++ linkage.  */                  \
     const decl_type        decl_name = { PP_NARG(__VA_ARGS__),                 \
-                                  V_TO_STR(decl_name),                  \
-                                  { APPLY(decl_builder, COMMA,          \
-                                          __VA_ARGS__) } };
+                                         V_TO_STR(decl_name),                  \
+                                         { APPLY(decl_builder, COMMA,          \
+                                                 __VA_ARGS__) } };
 
 #define make_decls(decl_name, fwd_decl, ...)                                   \
     custom_make_decls(decl_list_t, decl_name, default_make_decl, fwd_decl,     \

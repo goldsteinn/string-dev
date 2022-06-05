@@ -32,7 +32,7 @@
     extern int32_t test_name(base)(void const *);                              \
     APPLY(fwd_decl, ;, __VA_ARGS__);                                           \
     APPLY(make_bench_name(base), ;, __VA_ARGS__);                              \
-    APPLY(make_func_info, ;, APPLY_PACKL(base, __VA_ARGS__))
+    APPLY(make_func_info, ;, APPLY_PACKR(base, __VA_ARGS__))
 
 
 #endif

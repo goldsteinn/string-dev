@@ -16,8 +16,13 @@
 #define decl_memcmp(func) extern int func(void const *, void const *, uint64_t)
 #define decl_wmemcmp(func)                                                     \
     extern int func(wchar_t const *, wchar_t const *, uint64_t)
-#define decl_memchr(func)  extern void * func(void const *, int, uint64_t)
-#define decl_wmemchr(func) wchar_t * func(wchar_t const *, wchar_t, size_t);
+#define decl_memchr(func) extern void * func(void const *, int, uint64_t)
+#define decl_wmemchr(func)                                                     \
+    extern wchar_t * func(wchar_t const *, wchar_t, size_t);
+#define decl_strlen(func)  extern size_t func(char const *)
+#define decl_strnlen(func) extern size_t func(char const *, size_t)
+#define decl_wcslen(func)  extern size_t func(wchar_t const *)
+#define decl_wcsnlen(func) extern size_t func(wchar_t const *, size_t)
 
 #define STRRCHR_IMPLS expand_impls(strrchr_evex, strrchr_avx2, strrchr_sse2)
 #define WCSRCHR_IMPLS expand_impls(wcsrchr_evex, wcsrchr_avx2, wcsrchr_sse2)
@@ -26,15 +31,24 @@
     expand_impls(memcmp_ssse3, memcmp_sse2, memcmp_sse4, memcmp_avx2)
 #define WMEMCMP_IMPLS expand_impls(wmemcmp_sse2, wmemcmp_sse4, wmemcmp_avx2)
 #define MEMCMPEQ_IMPLS                                                         \
-    expand_impls(memcmpeq_ssse3, memcmpeq_sse2, memcmpeq_sse4)
-#define MEMRCHR_IMPLS expand_impls(memrchr_avx2, memrchr_evex, memrchr_sse2)
-#define MEMCHR_IMPLS  expand_impls(memchr_sse2)
-#define WMEMCHR_IMPLS expand_impls(wmemchr_sse2)
+    expand_impls(memcmpeq_ssse3, memcmpeq_sse2, memcmpeq_sse4),                \
+        memcmpeq_evex_dev, memcmpeq_evex512_dev
+#define MEMRCHR_IMPLS   expand_impls(memrchr_avx2, memrchr_evex, memrchr_sse2)
+#define MEMCHR_IMPLS    expand_impls(memchr_sse2, memchr_evex, memchr_avx2)
+#define RAWMEMCHR_IMPLS rawmemchr_evex_dev, rawmemchr_avx2_dev
+#define WMEMCHR_IMPLS                                                          \
+    expand_impls(wmemchr_sse2), wmemchr_evex_dev, wmemchr_avx2_dev
+#define STRLEN_IMPLS expand_impls(strlen_evex), strlen_evex512_dev
+#define STRNLEN_IMPLS expand_impls(strnlen_evex), strnlen_evex512_dev
+#define WCSLEN_IMPLS  expand_impls(wcslen_evex), wcslen_evex512_dev
+#define WCSNLEN_IMPLS expand_impls(wcsnlen_evex), wcsnlen_evex512_dev
 
 
 #define STRING_IMPLS                                                           \
     STRRCHR_IMPLS, WCSRCHR_IMPLS, MEMCPY_IMPLS, MEMCMP_IMPLS, WMEMCMP_IMPLS,   \
-        MEMCMPEQ_IMPLS, MEMRCHR_IMPLS, MEMCHR_IMPLS, WMEMCHR_IMPLS
+        MEMCMPEQ_IMPLS, MEMRCHR_IMPLS, MEMCHR_IMPLS, WMEMCHR_IMPLS,            \
+        STRLEN_IMPLS, WCSLEN_IMPLS, WCSNLEN_IMPLS,                             \
+        RAWMEMCHR_IMPLS, STRNLEN_IMPLS
 
 
 decl_func(memcpy, decl_memcpy, MEMCPY_IMPLS);
@@ -45,7 +59,12 @@ decl_func(strrchr, decl_strchr, STRRCHR_IMPLS);
 decl_func(wcsrchr, decl_wcschr, WCSRCHR_IMPLS);
 decl_func(memrchr, decl_memchr, MEMRCHR_IMPLS);
 decl_func(memchr, decl_memchr, MEMCHR_IMPLS);
+decl_func(rawmemchr, decl_strchr, RAWMEMCHR_IMPLS);
 decl_func(wmemchr, decl_wmemchr, WMEMCHR_IMPLS);
+decl_func(strlen, decl_strlen, STRLEN_IMPLS);
+decl_func(strnlen, decl_strnlen, STRNLEN_IMPLS);
+decl_func(wcslen, decl_wcslen, WCSLEN_IMPLS);
+decl_func(wcsnlen, decl_wcsnlen, WCSNLEN_IMPLS);
 
 
 custom_make_decls(decl_list_t,

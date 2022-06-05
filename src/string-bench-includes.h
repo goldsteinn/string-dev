@@ -11,12 +11,15 @@
         return NULL;                                                           \
     }
 
-
-#define wmemcmp_make_bench empty_make_bench
-
+#define rawmemchr_make_bench empty_make_bench
+#define wmemcmp_make_bench   empty_make_bench
+#define wcslen_make_bench    empty_make_bench
+#define wcsnlen_make_bench   empty_make_bench
 
 #include "bench-memchr.h"
 #include "bench-memcmp.h"
 #include "bench-memcpy.h"
 #include "bench-strchr.h"
+#include "bench-strlen.h"
+#include "bench-strnlen.h"
 #endif

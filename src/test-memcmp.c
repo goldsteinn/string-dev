@@ -138,7 +138,9 @@ test_memcmp_kernel(void const * test_f,
             memset_c(s0, 0x12, al_offset + j);
             memset_c(s1, 0x12, al_offset + j);
             for (uint32_t k = INIT_K; k <= j;
-                 k          = ROUNDUP_P2(next_v(k, PAGE_SIZE), wsize)) {
+                 k          = ROUNDUP_P2(
+                              k < (512 + 256) ? k + wsize : next_v(k, PAGE_SIZE),
+                     wsize)) {
                 for (uint32_t l = INIT_L; l < NPAIRS; ++l) {
                     uint8_t save0[4] = { 0 }, save1[4] = { 0 };
 

@@ -20,6 +20,7 @@
 #define VZEROUPPER_RETURN                                                      \
     VZEROUPPER;                                                                \
     ret
+#define COND_VZEROUPPER VZEROUPPER
 
 #define RAX_LP rax
 #define RDI_LP rdi

@@ -23,6 +23,7 @@ typedef union func_switch {
     add_func(strchrnul);
     add_func(strcpy);
     add_func(strlen);
+    add_func(strnlen);
     add_func(strncat);
     add_func(strncpy);
     add_func(strrchr);
@@ -35,6 +36,7 @@ typedef union func_switch {
     add_func(wcslen);
     add_func(wcsncat);
     add_func(wcsncpy);
+    add_func(wcsnlen);
     add_func(wcsrchr);
     add_func(wmemchr);
     add_func(wmemcmp);
