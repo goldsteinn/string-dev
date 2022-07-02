@@ -39,6 +39,56 @@ set_priors(uint8_t * buf, uint32_t setv, uint32_t ub, uint32_t inc) {
     "%p != %p, align=%u(%u), pos=%u, len=%u, inc=%u\n", res, expec, i,         \
         al_offset, j, k, inc
 
+extern char * rawmemchr_avx2_dev(char const *, char);
+
+void
+bad_rawmemchr() {
+    char * buf = mmap(0, 8192, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    assert(buf != MAP_FAILED);
+    memset(buf, -1, 8192);
+
+
+    char * ptr_start = buf + 4096 - 8;
+
+
+    /* Out of range matches. */
+    memset(ptr_start - 8, 0x1, 8);
+
+    ptr_start[32] = 0x1;
+
+
+    /* Fails. */
+    assert(rawmemchr_avx2_dev(ptr_start, 0x1) == ptr_start + 32);
+}
+
+static int
+test_rawmemchr_kernel(void const * test_f, uint32_t test_size) {
+    bad_rawmemchr();
+    func_switch_t func = { test_f };
+    (void)(func);
+    uint8_t *     buf  = make_buf(test_size);
+    memset_c(buf, 0xff, test_size);
+    for (uint32_t i = 0; i < test_size; ++i) {
+        for (uint32_t j = 0; j + i < test_size; ++j) {
+            for(uint32_t k = 1; k <= 32 && k < i; ++k) {
+                buf[i - k] = 0x1;
+            }
+            buf[i + j] = 0x1;
+            uint8_t * res =
+                CAST(uint8_t *, func.run_rawmemchr(CAST(char const *, buf + i),
+                                                   CAST(uint8_t, 0x1)));
+
+            test_assert(res == buf + i + j);
+            buf[i + j] = 0xff;
+            for(uint32_t k = 1; k <= 32 && k < i; ++k) {
+                buf[i - k] = 0xff;
+            }            
+        }
+    }
+    return 0;
+}
+
 static int
 test_memchr_kernel(void const * test_f,
                    uint32_t     test_size,
@@ -124,10 +174,10 @@ test_memchr(void const * test_f) {
 
 int
 test_rawmemchr(void const * test_f) {
-    for (uint32_t i = PAGE_SIZE; i <= 2 * PAGE_SIZE; i += 2048 + 4) {
+    for (uint32_t i = PAGE_SIZE; i <= 2 * PAGE_SIZE; i += PAGE_SIZE) {
         if (i == PAGE_SIZE) {
         }
-        if (test_memchr_kernel(test_f, i, 1, 0)) {
+        if (test_rawmemchr_kernel(test_f, i)) {
 
             return 1;
         }

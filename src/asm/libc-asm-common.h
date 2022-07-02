@@ -15,6 +15,7 @@
 
 #define USE_MULTIARCH
 #define IS_IN(x) 1
+#define ISA_SHOULD_BUILD(x) 1
 
 #define ZERO_UPPER_VEC_REGISTERS_RETURN VZEROUPPER_RETURN
 #define VZEROUPPER_RETURN                                                      \

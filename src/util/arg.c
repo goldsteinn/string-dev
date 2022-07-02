@@ -485,7 +485,7 @@ checkArgDef(ArgParser const * restrict ap,
         }
         if (desc[i].kind != state) {
             if ((state == KindOption) && (desc[i].kind == KindHelp) &&
-                (desc[i].args_begin != NULL)) {
+                (desc[i].args_begin[0] != NULL)) {
                 hashelp = true;
                 continue;
             }

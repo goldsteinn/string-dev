@@ -17,46 +17,47 @@
    <https://www.gnu.org/licenses/>.  */
 #include "../../libc-asm-common.h"
 #if IS_IN (libc)
-
+	// #define USE_AS_RAWMEMCHR
 	// # include <sysdep.h>
+
 # ifndef MEMCHR
-#  define MEMCHR	__memchr_avx2
+#  define MEMCHR				__memchr_avx2
 # endif
 
 # ifdef USE_AS_WMEMCHR
-#  define VPCMPEQ	vpcmpeqd
-#  define VPBROADCAST	vpbroadcastd
-#  define CHAR_SIZE	4
+#  define VPCMPEQ				vpcmpeqd
+#  define VPBROADCAST			vpbroadcastd
+#  define CHAR_SIZE			4
 # else
-#  define VPCMPEQ	vpcmpeqb
-#  define VPBROADCAST	vpbroadcastb
-#  define CHAR_SIZE	1
+#  define VPCMPEQ				vpcmpeqb
+#  define VPBROADCAST			vpbroadcastb
+#  define CHAR_SIZE			1
 # endif
 
 # ifdef USE_AS_RAWMEMCHR
-#  define ERAW_PTR_REG	ecx
-#  define RRAW_PTR_REG	rcx
-#  define ALGN_PTR_REG	rdi
+#  define ERAW_PTR_REG			ecx
+#  define RRAW_PTR_REG			rcx
+#  define ALGN_PTR_REG			rdi
 # else
-#  define ERAW_PTR_REG	edi
-#  define RRAW_PTR_REG	rdi
-#  define ALGN_PTR_REG	rcx
+#  define ERAW_PTR_REG			edi
+#  define RRAW_PTR_REG			rdi
+#  define ALGN_PTR_REG			rcx
 # endif
 
 # ifndef VZEROUPPER
-#  define VZEROUPPER	vzeroupper
+#  define VZEROUPPER			vzeroupper
 # endif
-
+// abf-off
 # ifndef SECTION
 #  define SECTION(p)	p##.avx
 # endif
+// abf-on
+# define VEC_SIZE			32
+# define PAGE_SIZE			4096
+# define CHAR_PER_VEC			(VEC_SIZE / CHAR_SIZE)
 
-# define VEC_SIZE 32
-# define PAGE_SIZE 4096
-# define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
-
-	.section SECTION(.text),"ax",@progbits
-ENTRY_P2ALIGN (MEMCHR, 5)
+	.section SECTION(.text), "ax", @progbits
+ENTRY_P2ALIGN(MEMCHR, 5)
 # ifndef USE_AS_RAWMEMCHR
 	/* Check for zero length.  */
 #  ifdef __ILP32__
@@ -101,17 +102,18 @@ L(first_vec_x0):
 	/* NB: Multiply length by 4 to get byte count.  */
 	sall	$2, %edx
 #  endif
-    COND_VZEROUPPER
-	/* Use branch instead of cmovcc so L(first_vec_x0) fits in one fetch
-	   block. branch here as opposed to cmovcc is not that costly. Common
-	   usage of memchr is to check if the return was NULL (if string was
-	   known to contain CHAR user would use rawmemchr). This branch will be
-	   highly correlated with the user branch and can be used by most
-	   modern branch predictors to predict the user branch.  */
+	COND_VZEROUPPER
+	/* Use branch instead of cmovcc so L(first_vec_x0) fits in one
+	   fetch block. branch here as opposed to cmovcc is not that
+	   costly. Common usage of memchr is to check if the return was
+	   NULL (if string was known to contain CHAR user would use
+	   rawmemchr). This branch will be highly correlated with the
+	   user branch and can be used by most modern branch predictors
+	   to predict the user branch.  */
 	cmpl	%eax, %edx
-    jle  L(null)
+	jle	L(null)
 	addq	%rdi, %rax
-    ret
+	ret
 # endif
 
 	.p2align 4,, 10
@@ -404,23 +406,24 @@ L(last_vec_x3):
 
 	.p2align 4
 L(cross_page_boundary):
-	/* Save pointer before aligning as its original value is necessary for
-	   computer return address if byte is found or adjusting length if it
-	   is not and this is memchr.  */
+	/* Save pointer before aligning as its original value is
+	   necessary for computer return address if byte is found or
+	   adjusting length if it is not and this is memchr.  */
 	movq	%rdi, %rcx
-	/* Align data to VEC_SIZE. ALGN_PTR_REG is rcx for memchr and rdi for
-	   rawmemchr.  */
-	andq	$-VEC_SIZE, %ALGN_PTR_REG
-	VPCMPEQ	(%ALGN_PTR_REG), %ymm0, %ymm1
+	/* Align data to VEC_SIZE - 1. ALGN_PTR_REG is rcx for memchr
+	   and rdi for rawmemchr.  */
+	orq	$(VEC_SIZE - 1), %ALGN_PTR_REG
+	VPCMPEQ	-(VEC_SIZE - 1)(%ALGN_PTR_REG), %ymm0, %ymm1
 	vpmovmskb %ymm1, %eax
 # ifndef USE_AS_RAWMEMCHR
-	/* Calculate length until end of page (length checked for a match).  */
-	leal	VEC_SIZE(%ALGN_PTR_REG), %esi
-	subl	%ERAW_PTR_REG, %esi
-# ifdef USE_AS_WMEMCHR
+	/* Calculate length until end of page (length checked for a
+	   match).  */
+	leaq	1(%ALGN_PTR_REG), %rsi
+	subq	%RRAW_PTR_REG, %rsi
+#  ifdef USE_AS_WMEMCHR
 	/* NB: Divide bytes by 4 to get wchar_t count.  */
 	shrl	$2, %esi
-# endif
+#  endif
 # endif
 	/* Remove the leading bytes.  */
 	sarxl	%ERAW_PTR_REG, %eax, %eax
@@ -431,10 +434,8 @@ L(cross_page_boundary):
 # endif
 	testl	%eax, %eax
 	jz	L(cross_page_continue)
-	bsfl	%eax, %eax
+	tzcntl	%eax, %eax
 	addq	%RRAW_PTR_REG, %rax
-	VZEROUPPER_RETURN
-
-
-END (MEMCHR)
+	ZERO_UPPER_VEC_REGISTERS_RETURN
+END(MEMCHR)
 #endif

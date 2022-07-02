@@ -47,8 +47,8 @@
 #define die(msg, args...)    I_die(ERR_ARGS, msg, ##args);
 #define errdie(msg, args...) I_errdie(ERR_ARGS, errno, msg, ##args);
 
-/* #define WITH_DBG_PRINT */
-#ifdef WITH_DBG_PRINT
+
+#if 0
 #define dbg_assert(...) die_assert(__VA_ARGS__)
 #define dbg_print(...)  fprintf(stderr, __VA_ARGS__)
 #define PRINTFFL        fprintf(stderr, "%-20s:%-20s:%-4d\n", ERR_ARGS)

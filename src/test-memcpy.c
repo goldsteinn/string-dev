@@ -4,50 +4,31 @@
 
 #include "string-func-switches.h"
 #include "string-test-common.h"
+#include "string-test-cpy-common.h"
 
 #define run(d, s, n)                                                           \
     CAST(uint8_t *, func.run_memcpy(CAST(void *, d), CAST(void const *, s), n))
 
 
-#define GET_EXPEC(addr, idx) (uint8_t)((((uint64_t)(addr)) + (idx)) % 255)
-
-#define START 1
-#define END   0
-
 static int32_t
-check_region(const uint8_t * s1, const uint8_t * s2, uint64_t len) {
-    for (uint64_t i = 0; i < len; ++i) {
-        if (s1[i] != GET_EXPEC(s2, i)) {
-            fprintf(stderr, "(%p, %p): %lu / %lu: %x != %x\n", s1 + i, s2 + i,
-                    i, len, s1[i], GET_EXPEC(s2, i));
-            return 1;
-        }
-    }
+check_region_mm(const uint8_t * s1, const uint8_t * s2, uint64_t len) {
     return memcmp(s1, s2, len);
 }
 
-static int32_t
-check_sentinel(const uint8_t * start, const uint8_t * end, int start_or_end) {
-    assert(start <= end);
-    __m256i  boundary_v = _mm256_set1_epi8(-1);
-    uint32_t expec      = (start + 32 <= end) ? ~0u : (1u << (end - start)) - 1;
-    uint32_t shift      = (start + 32 <= end) || (start_or_end == START)
-                              ? 0
-                              : (start - (end - 32));
-    if ((start + 32 <= end) == start_or_end) {
-        PRINTFFL;
-        __m256i v = _mm256_loadu_si256((__m256i const *)(end - 32));
-        return ((_mm256_movemask_epi8(_mm256_cmpeq_epi8(v, boundary_v)) >>
-                 shift) &
-                expec) != expec;
-    }
-    else {
-        PRINTFFL;
-        __m256i v = _mm256_loadu_si256((__m256i const *)start);
-        return ((_mm256_movemask_epi8(_mm256_cmpeq_epi8(v, boundary_v)) >>
-                 shift) &
-                expec) != expec;
-    }
+static void
+init_memcpy_dst(uint8_t * s1_start,
+                uint8_t * s1_end,
+                uint8_t * s1,
+                uint64_t  len) {
+    init_cpy_dst(s1_start, s1_end, s1, len);
+}
+
+static void
+init_memcpy_sentinels(uint8_t * s1_start,
+                      uint8_t * s1_end,
+                      uint8_t * s1,
+                      uint64_t  len) {
+    init_cpy_sentinels(s1_start, s1_end, s1, len);
 }
 
 static int32_t
@@ -56,26 +37,8 @@ check_memcpy(const uint8_t * s1_start,
              const uint8_t * s1,
              const uint8_t * s2,
              uint64_t        len) {
-    if (check_sentinel(s1_start, s1, START)) {
-        fprintf(stderr, "Start Sentinel Error\n");
-        return 1;
-    }
-    if (check_region(s1, s2, len)) {
-        fprintf(stderr, "Region Error: %lu\n", len);
-        return 2;
-    }
-    if (check_sentinel(s1 + len, s1_end, END)) {
-        fprintf(stderr, "End Sentinel Error\n");
-        return 3;
-    }
-    return 0;
+    return check_cpy(s1_start, s1_end, s1, s2, len);
 }
-
-static int32_t
-check_region_mm(const uint8_t * s1, const uint8_t * s2, uint64_t len) {
-    return memcmp(s1, s2, len);
-}
-
 
 static int32_t
 check_memmove(const uint8_t * s1_start,
@@ -105,47 +68,6 @@ check_memmove(const uint8_t * s1_start,
     (void)(s1_start);
     (void)(s1_end);
     return 0;
-}
-
-
-static void
-init_sentinel(uint8_t * start, uint8_t * end, int32_t start_or_end) {
-    die_assert(start <= end);
-    __m256i v = _mm256_set1_epi8(-1);
-    if ((start + 32 <= end) == start_or_end) {
-        _mm256_storeu_si256((__m256i *)(end - 32), v);
-    }
-    else {
-        _mm256_storeu_si256((__m256i *)start, v);
-    }
-}
-
-
-static void
-init_region(uint8_t * s2, uint64_t len) {
-    for (uint64_t i = 0; i < len; ++i) {
-        s2[i] = GET_EXPEC(s2, i);
-    }
-}
-
-
-static void
-init_memcpy_sentinels(uint8_t * s1_start,
-                      uint8_t * s1_end,
-                      uint8_t * s1,
-                      uint64_t  len) {
-    init_sentinel(s1_start, s1, START);
-    init_sentinel(s1 + len, s1_end, END);
-}
-
-static void
-init_memcpy_dst(uint8_t * s1_start,
-                uint8_t * s1_end,
-                uint8_t * s1,
-                uint64_t  len) {
-    memset_c(s1, 0xff, len);
-    init_sentinel(s1_start, s1, START);
-    init_sentinel(s1 + len, s1_end, END);
 }
 
 

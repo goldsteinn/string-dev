@@ -17,8 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 #include "../../libc-asm-common.h"
 #if IS_IN (libc)
-
-	// # include <sysdep.h>
+#define USE_AS_RAWMEMCHR
+//# include <sysdep.h>
 
 # ifndef MEMCHR
 #  define MEMCHR	__memchr_evex
@@ -548,7 +548,7 @@ L(last_4x_vec):
 #  else
 	shrq	$CHAR_PER_VEC, %rcx
 #  endif
-    andl	%ecx, %eax
+	andl	%ecx, %eax
 	jz	L(zero_end2)
 	bsfl	%eax, %eax
 	leaq	(VEC_SIZE * 4)(%rdi, %rax, CHAR_SIZE), %rax

@@ -30,6 +30,52 @@ set_priors(uint8_t * buf, uint32_t setv, uint32_t ub, uint32_t inc) {
         al_offset, j, k, inc
 
 static int
+test_memrchr_kernel_robust(void const * test_f, uint32_t test_size) {
+    func_switch_t func = { test_f };
+    uint8_t *     buf  = make_buf(test_size);
+    memset_c(buf, 0xff, test_size);
+
+    for (uint32_t i = 0; i < test_size; ++i) {
+        for (uint32_t j = 0; j + i < test_size; ++j) {
+            for (uint32_t k = 0; k < 64 && k + i + j < test_size; k += 8) {
+                buf[i + j + k] = 0x1;
+            }
+            test_assert(run(buf + i, 0x01, j) == NULL);
+            if (j) {
+                *(buf + i) = 0x01;
+                assert(run(buf + i, 0x01, j) == buf + i);
+                *(buf + i) = 0xff;
+            }
+            if (i) {
+                *(buf + i - 1) = 0x01;
+                assert(run(buf + i, 0x01, j) == NULL);
+                *(buf + i - 1) = 0xff;
+            }
+            if (j >= 32) {
+                *(buf + i + j - 1) = 0x01;
+                assert(run(buf + i, 0x01, j) == (buf + i + j - 1));
+                *(buf + i + j - 17) = 0x01;
+                assert(run(buf + i, 0x01, j) == (buf + i + j - 1));
+
+                
+                *(buf + i + j - 1) = 0xff;
+                assert(run(buf + i, 0x01, j) == (buf + i + j - 17));
+                *(buf + i + j - 17) = 0xff;
+
+                *(buf + i + j - 31) = 0x01;
+                assert(run(buf + i, 0x01, j) == (buf + i + j - 31));
+                *(buf + i + j - 31) = 0xff;
+            }
+            for (uint32_t k = 0; k < 64 && k + i + j < test_size; k += 8) {
+                buf[i + j + k] = 0xff;
+            }
+        }
+    }
+    free_buf(buf, test_size);
+    return 0;
+}
+
+static int
 test_memrchr_kernel(void const * test_f, uint32_t test_size) {
     if (test_size <= 4096) {
         return 0;
@@ -38,6 +84,7 @@ test_memrchr_kernel(void const * test_f, uint32_t test_size) {
     uint8_t *     buf  = make_buf(test_size);
     uint8_t *     test_buf;
     memset_c(buf, 0xff, test_size);
+
     for (uint32_t i = INIT_I; i < nalignments * 2; ++i) {
         uint32_t al_offset = alignments[i % nalignments];
         al_offset = (i >= nalignments ? PAGE_SIZE - al_offset : al_offset);
@@ -122,15 +169,15 @@ test_memrchr_kernel(void const * test_f, uint32_t test_size) {
             }
         }
     }
+    free_buf(buf, test_size);
     return 0;
 }
 
 int
 test_memrchr(void const * test_f) {
-    for (uint32_t i = PAGE_SIZE; i <= 2 * PAGE_SIZE; i += 2048 + 4) {
-        if (i == PAGE_SIZE) {
-        }
-        if (test_memrchr_kernel(test_f, i)) {
+    for (uint32_t i = PAGE_SIZE; i <= 2 * PAGE_SIZE; i += PAGE_SIZE) {
+        test_memrchr_kernel_robust(test_f, i);
+        if (0 && test_memrchr_kernel(test_f, i)) {
 
             return 1;
         }

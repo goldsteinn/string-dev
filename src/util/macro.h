@@ -10,7 +10,7 @@
 
 
 /******************************************************************************/
-
+#undef  __FILENAME__
 #ifndef __FILENAME__
 #define __FILENAME__                                                           \
     (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1   \

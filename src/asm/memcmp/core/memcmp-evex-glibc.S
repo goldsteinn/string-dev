@@ -15,7 +15,7 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
+#include "../../libc-asm-common.h"
 #if IS_IN (libc)
 
 /* memcmp/wmemcmp is implemented as:
@@ -53,7 +53,7 @@ Latency:
        cache-line are put in adjacent lines. This can get beneficial
        L2 spatial prefetching and L1 next-line prefetching.  */
 
-# include <sysdep.h>
+//# include <sysdep.h>
 
 # ifndef MEMCMP
 #  define MEMCMP	__memcmp_evex_movbe

@@ -229,4 +229,14 @@ wmemchr_bench_init(bench_info_t * bench_info) {
 }
 
 
+#define strcpy_bench_init  empty_bench_init
+#define strcat_bench_init  empty_bench_init
+#define stpcpy_bench_init  empty_bench_init
+#define strncpy_bench_init empty_bench_init
+#define strncat_bench_init empty_bench_init
+#define stpncpy_bench_init empty_bench_init
+#define strlcpy_bench_init empty_bench_init
+#define strlcat_bench_init empty_bench_init
+
+
 #endif

@@ -1,2 +1,2 @@
-#define MEMCMPEQ			memcmpeq_evex_dev
-#include "core/memcmpeq-evex-dev.S"
+#define MEMCMPEQ			memcmpeq_evex_glibc
+#include "core/memcmpeq-evex-glibc.S"

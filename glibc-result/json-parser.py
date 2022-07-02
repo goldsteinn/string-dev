@@ -64,8 +64,9 @@ def csv_add(s, field):
 
 def set_if_exists(json_map, field, field_val, fields):
     if field in json_map:
-        fields[field] = True
-        return str(json_map[field]).lstrip().rstrip(), fields
+        new_val = str(json_map[field]).lstrip().rstrip()
+        fields[field] = new_val
+        return new_val, fields
 
     return field_val, fields
 
@@ -182,6 +183,10 @@ class Result():
         return get_stat(self.timings[ifunc])
 
     def get_hdr(self):
+        out = ""
+        for f in self.fields:
+            out = csv_add(out, self.fields[f])
+        return out
         out = csv_add("", self.length)
         out = csv_add(out, self.align1)
         out = csv_add(out, self.align2)
@@ -371,17 +376,17 @@ class JsonFile():
             sz, self.fields = set_if_exists(result, "char", sz, self.fields)
             sz, self.fields = set_if_exists(result, "freq", sz, self.fields)
             sz, self.fields = set_if_exists(result, "maxlen", sz, self.fields)
+            sz, self.fields = set_if_exists(result, "n", sz, self.fields)
+            sz, self.fields = set_if_exists(result, "strlen", sz, self.fields)
 
             key = get_key(length, align1, align2, dgs, wfs, sz)
-            if "memmove" in self.get_bench_func() and align1 == align2:
-                continue
             if self.ifuncs is None:
                 self.ifuncs = ifuncs
 
             assert self.ifuncs == ifuncs
             if key not in self.all_results:
                 self.key_order.append(key)
-                self.all_results[key] = Result(ifuncs, self.fields, length,
+                self.all_results[key] = Result(ifuncs, copy.deepcopy(self.fields), length,
                                                align1, align2, dgs, wfs, sz)
             self.all_results[key].add_times(result["timings"])
 

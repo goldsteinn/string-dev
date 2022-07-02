@@ -15,9 +15,10 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
 #include "../../libc-asm-common.h"
 #if IS_IN (libc)
+
+//# include <sysdep.h>
 
 # ifndef MEMRCHR
 #  define MEMRCHR				__memrchr_avx2
@@ -26,13 +27,11 @@
 # ifndef VZEROUPPER
 #  define VZEROUPPER			vzeroupper
 # endif
-
 // abf-off
 # ifndef SECTION
 #  define SECTION(p)	p##.avx
 # endif
-// abf-on
-
+//abf-on
 # define VEC_SIZE			32
 # define PAGE_SIZE			4096
 	.section SECTION(.text), "ax", @progbits
@@ -125,7 +124,7 @@ L(last_2x_vec):
 
 	/* Inexpensive place to put this regarding code size / target alignments
 	   / ICache NLP. Necessary for 2-byte encoding of jump to page cross
-	   case which inturn in necessray for hot path (len <= VEC_SIZE) to fit
+	   case which in turn is necessary for hot path (len <= VEC_SIZE) to fit
 	   in first cache line.  */
 L(page_cross):
 	movq	%rax, %rsi

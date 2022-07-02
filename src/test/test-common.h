@@ -59,7 +59,6 @@ static NONNULL(1) int32_t is_seq(uint8_t const * buf, uint64_t sz) {
     if (UNLIKELY(!(X))) {                                                      \
         fprintf(stderr, "\n\t%-20s:%-4u", __FILENAME__, __LINE__);             \
         todo;                                                                  \
-        abort();                                                               \
         return -1;                                                             \
     }
 

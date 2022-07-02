@@ -53,7 +53,7 @@ done:
 }
 
 
-#define NPAIRS    9
+#define NPAIRS    15
 #define S1_IDX(x) ((x) << 1)
 #define S2_IDX(x) (((x) << 1) + 1)
 
@@ -85,6 +85,42 @@ make_alignment_pairs(uint64_t * pairs, uint32_t alignment) {
 
     pairs[S1_IDX(8)] = alignment;
     pairs[S2_IDX(8)] = alignment - (!!alignment);
+
+    pairs[S1_IDX(9)] = alignment - (alignment >= 2 ? 2 : 0);
+    pairs[S2_IDX(9)] = alignment;
+
+    pairs[S1_IDX(10)] = alignment - (alignment >= 3 ? 3 : 0);
+    pairs[S2_IDX(10)] = alignment;
+
+    pairs[S1_IDX(11)] = alignment - (alignment >= 5 ? 5 : 0);
+    pairs[S2_IDX(11)] = alignment;
+
+    pairs[S1_IDX(12)] = alignment - (alignment >= 9 ? 9 : 0);
+    pairs[S2_IDX(12)] = alignment;
+
+    pairs[S1_IDX(13)] = alignment - (alignment >= 17 ? 17 : 0);
+    pairs[S2_IDX(13)] = alignment;
+
+    pairs[S1_IDX(14)] = alignment - (alignment >= 33 ? 33 : 0);
+    pairs[S2_IDX(14)] = alignment;
+
+    pairs[S1_IDX(9)] = alignment;
+    pairs[S2_IDX(9)] = alignment - (alignment >= 2 ? 2 : 0);
+
+    pairs[S1_IDX(10)] = alignment;
+    pairs[S2_IDX(10)] = alignment - (alignment >= 3 ? 3 : 0);
+
+    pairs[S1_IDX(11)] = alignment;
+    pairs[S2_IDX(11)] = alignment - (alignment >= 5 ? 5 : 0);
+
+    pairs[S1_IDX(12)] = alignment;
+    pairs[S2_IDX(12)] = alignment - (alignment >= 9 ? 9 : 0);
+
+    pairs[S1_IDX(13)] = alignment;
+    pairs[S2_IDX(13)] = alignment - (alignment >= 17 ? 17 : 0);
+
+    pairs[S1_IDX(14)] = alignment;
+    pairs[S2_IDX(14)] = alignment - (alignment >= 33 ? 33 : 0);
 }
 
 #endif

@@ -16,6 +16,16 @@
 #define wcslen_make_bench    empty_make_bench
 #define wcsnlen_make_bench   empty_make_bench
 
+#define strcpy_make_bench  empty_make_bench
+#define strcat_make_bench  empty_make_bench
+#define stpcpy_make_bench  empty_make_bench
+#define strncpy_make_bench empty_make_bench
+#define strncat_make_bench empty_make_bench
+#define stpncpy_make_bench empty_make_bench
+#define strlcpy_make_bench empty_make_bench
+#define strlcat_make_bench empty_make_bench
+
+
 #include "bench-memchr.h"
 #include "bench-memcmp.h"
 #include "bench-memcpy.h"
