@@ -154,38 +154,42 @@ check_stpncpy(const uint8_t * s1_start,
               const uint8_t * ret,
               uint64_t        n,
               uint64_t        len) {
-    uint64_t end = MIN(n, len + 1);
 
+    if (ret != s1 + MIN(len, n)) {
+        fprintf(stderr, "Bad Return: %p != %p\n", ret, s1 + MIN(len, n));
+        return 4;
+    }
+
+
+    uint64_t end_region = MIN(len, n);
     if (check_sentinel(s1_start, s1, START)) {
         fprintf(stderr, "Start Sentinel Error\n");
         return 1;
     }
-    if (check_region(s1, s2, end)) {
-        fprintf(stderr, "Region Error: %lu\n", len);
-        return 2;
-    }
-    if (n <= len) {
-        if (check_sentinel(s1 + len, s1_end, END)) {
-            fprintf(stderr, "End Sentinel Error\n");
-            return 3;
-        }
-    }
-
-    if (ret != s1 + end) {
-        fprintf(stderr, "Bad Return\n");
-        return 4;
-    }
 
     if (len < n) {
-        if (!check_region_is(s1 + len, 0, n - len)) {
-            return 1;
-        }
-
-        uint64_t el = MIN(s1_end - s1, (long int)(32));
-        if (!check_region_is(s1 + n, 0xff, el)) {
+        if (check_region_is(s1 + len, 0, n - len)) {
+            fprintf(stderr, "No zfill\n");
+            for (uint64_t i = len; i < n; ++i) {
+                if (s1[i] != '\0') {
+                    fprintf(stderr, "%-6lu -> %x\n", i, s1[i]);
+                }
+            }
             return 1;
         }
     }
+
+    if (check_region(s1, s2, end_region)) {
+        fprintf(stderr, "Region Error: %lu\n", len);
+        return 1;
+    }
+
+    if (check_sentinel(s1 + n, s1_end, END)) {
+        fprintf(stderr, "End Sentinel Error\n");
+        return 1;
+    }
+
+    return 0;
 }
 
 static int32_t
@@ -446,9 +450,9 @@ typedef FUNC_T(check_strcpy) check_func_t;
     "al1=%lu, al2=%lu, i=%lu, j=%lu, k=%lu, n=%lu\n",                          \
         ((uint64_t)test1) % 4096, ((uint64_t)test2) % 4096, i, j, k, n
 #define INIT_I 0
-#define INIT_J 0
+#define INIT_J 33
 #define INIT_K 0
-#define INIT_N 0
+#define INIT_N 65
 
 //#define VPRINT(...) fprintf(stderr, __VA_ARGS__)
 #ifndef VPRINT
@@ -664,7 +668,10 @@ test_strncat(void const * test_f) {
 }
 int32_t
 test_stpncpy(void const * test_f) {
-    (void)(test_f);
+    test_assert(test_strncpy_kernel(4096, test_f, &check_stpncpy, &init_strncpy,
+                                    1) == 0);
+    test_assert(test_strncpy_kernel(8192, test_f, &check_stpncpy, &init_strncpy,
+                                    1) == 0);
     return 0;
 }
 int32_t
@@ -674,6 +681,57 @@ test_strlcpy(void const * test_f) {
 }
 int32_t
 test_strlcat(void const * test_f) {
+    (void)(test_f);
+    return 0;
+}
+
+
+
+int32_t
+test_wcscpy(void const * test_f) {
+    (void)(test_f);
+    (void)(test_f);
+    return 0;
+}
+int32_t
+test_wcscat(void const * test_f) {
+    (void)(test_f);
+    (void)(test_f);
+    return 0;
+}
+int32_t
+test_wcpcpy(void const * test_f) {
+
+    (void)(test_f);
+    (void)(test_f);
+    return 0;
+}
+
+int32_t
+test_wcsncpy(void const * test_f) {
+    (void)(test_f);
+    (void)(test_f);
+    return 0;
+}
+int32_t
+test_wcsncat(void const * test_f) {
+    (void)(test_f);
+    (void)(test_f);
+    return 0;
+}
+int32_t
+test_wcpncpy(void const * test_f) {
+    (void)(test_f);
+    (void)(test_f);
+    return 0;
+}
+int32_t
+test_wcslcpy(void const * test_f) {
+    (void)(test_f);
+    return 0;
+}
+int32_t
+test_wcslcat(void const * test_f) {
     (void)(test_f);
     return 0;
 }

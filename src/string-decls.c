@@ -14,6 +14,11 @@
 #define decl_strncpy(func)                                                     \
     extern char * func(char * restrict, char const * restrict, size_t);
 
+#define decl_wcscpy(func)                                                      \
+    extern wchar_t * func(wchar_t * restrict, wchar_t const * restrict);
+#define decl_wcsncpy(func)                                                     \
+    extern wchar_t * func(wchar_t * restrict, wchar_t const * restrict, size_t);
+
 #define decl_memcpy(func)                                                      \
     extern void * func(void * restrict, void const * restrict, size_t);
 #define decl_strchr(func) extern char func(char const *, uint8_t)
@@ -28,6 +33,7 @@
 #define decl_strnlen(func) extern size_t func(char const *, size_t)
 #define decl_wcslen(func)  extern size_t func(wchar_t const *)
 #define decl_wcsnlen(func) extern size_t func(wchar_t const *, size_t)
+#define decl_memset(func)  extern void func(void const *, int, size_t)
 
 #define STRRCHR_IMPLS expand_impls(strrchr_evex, strrchr_avx2, strrchr_sse2)
 #define WCSRCHR_IMPLS expand_impls(wcsrchr_evex, wcsrchr_avx2, wcsrchr_sse2)
@@ -60,6 +66,17 @@
 #define STRLCPY_IMPLS expand_impls(strlcpy_sse2, strlcpy_avx2, strlcpy_evex)
 #define STRLCAT_IMPLS expand_impls(strlcat_sse2, strlcat_avx2, strlcat_evex)
 
+#define WCSCPY_IMPLS  expand_impls(wcscpy_sse2, wcscpy_avx2, wcscpy_evex)
+#define WCSCAT_IMPLS  expand_impls(wcscat_sse2, wcscat_avx2, wcscat_evex)
+#define WCPCPY_IMPLS  expand_impls(wcpcpy_sse2, wcpcpy_avx2, wcpcpy_evex)
+#define WCSNCPY_IMPLS expand_impls(wcsncpy_sse2, wcsncpy_avx2, wcsncpy_evex)
+#define WCSNCAT_IMPLS expand_impls(wcsncat_sse2, wcsncat_avx2, wcsncat_evex)
+#define WCPNCPY_IMPLS expand_impls(wcpncpy_sse2, wcpncpy_avx2, wcpncpy_evex)
+#define WCSLCPY_IMPLS expand_impls(wcslcpy_sse2, wcslcpy_avx2, wcslcpy_evex)
+#define WCSLCAT_IMPLS expand_impls(wcslcat_sse2, wcslcat_avx2, wcslcat_evex)
+
+
+#define MEMSET_IMPLS memset_sse2_glibc, memset_sse2_erms_glibc
 
 #define STRING_IMPLS                                                           \
     STRRCHR_IMPLS, WCSRCHR_IMPLS, MEMCPY_IMPLS, MEMCMP_IMPLS, WMEMCMP_IMPLS,   \
@@ -67,7 +84,9 @@
         STRLEN_IMPLS, WCSLEN_IMPLS, WCSNLEN_IMPLS, RAWMEMCHR_IMPLS,            \
         STRNLEN_IMPLS, STRCPY_IMPLS, STRCAT_IMPLS, STPCPY_IMPLS,               \
         STRNCPY_IMPLS, STRNCAT_IMPLS, STPNCPY_IMPLS, STRLCPY_IMPLS,            \
-        STRLCAT_IMPLS
+        STRLCAT_IMPLS, MEMSET_IMPLS, WCSCPY_IMPLS, WCSCAT_IMPLS, WCPCPY_IMPLS, \
+        WCSNCPY_IMPLS, WCSNCAT_IMPLS, WCPNCPY_IMPLS, WCSLCPY_IMPLS,            \
+        WCSLCAT_IMPLS
 
 
 decl_func(memcpy, decl_memcpy, MEMCPY_IMPLS);
@@ -84,6 +103,7 @@ decl_func(strlen, decl_strlen, STRLEN_IMPLS);
 decl_func(strnlen, decl_strnlen, STRNLEN_IMPLS);
 decl_func(wcslen, decl_wcslen, WCSLEN_IMPLS);
 decl_func(wcsnlen, decl_wcsnlen, WCSNLEN_IMPLS);
+decl_func(memset, decl_memset, MEMSET_IMPLS);
 decl_func(strcpy, decl_strcpy, STRCPY_IMPLS);
 decl_func(strcat, decl_strcpy, STRCAT_IMPLS);
 decl_func(stpcpy, decl_strcpy, STPCPY_IMPLS);
@@ -92,6 +112,16 @@ decl_func(strncat, decl_strncpy, STRNCAT_IMPLS);
 decl_func(stpncpy, decl_strncpy, STPNCPY_IMPLS);
 decl_func(strlcpy, decl_strncpy, STRLCPY_IMPLS);
 decl_func(strlcat, decl_strncpy, STRLCAT_IMPLS);
+
+decl_func(wcscpy, decl_wcscpy, WCSCPY_IMPLS);
+decl_func(wcscat, decl_wcscpy, WCSCAT_IMPLS);
+decl_func(wcpcpy, decl_wcscpy, WCPCPY_IMPLS);
+decl_func(wcsncpy, decl_wcsncpy, WCSNCPY_IMPLS);
+decl_func(wcsncat, decl_wcsncpy, WCSNCAT_IMPLS);
+decl_func(wcpncpy, decl_wcsncpy, WCPNCPY_IMPLS);
+decl_func(wcslcpy, decl_wcsncpy, WCSLCPY_IMPLS);
+decl_func(wcslcat, decl_wcsncpy, WCSLCAT_IMPLS);
+
 
 
 custom_make_decls(decl_list_t,

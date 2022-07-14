@@ -334,6 +334,8 @@ class JsonFile():
             max_char = None
             length, self.fields = set_if_exists(result, "length", length,
                                                 self.fields)
+            length, self.fields = set_if_exists(result, "len_haystack", length,
+                                                self.fields)            
             length, self.fields = set_if_exists(result, "max-alignment",
                                                 length, self.fields)
             length, self.fields = set_if_exists(result, "len", length,
@@ -342,14 +344,20 @@ class JsonFile():
                                                 self.fields)
             align1, self.fields = set_if_exists(result, "align1", align1,
                                                 self.fields)
+            align1, self.fields = set_if_exists(result, "align_haystack", align1,
+                                                self.fields)            
             align1, self.fields = set_if_exists(result, "alignment", align1,
                                                 self.fields)
             align1, self.fields = set_if_exists(result, "align", align1,
                                                 self.fields)
             align2, self.fields = set_if_exists(result, "align2", align2,
                                                 self.fields)
+            align2, self.fields = set_if_exists(result, "align_needle", align2,
+                                                self.fields)            
             dgs, self.fields = set_if_exists(result, "dst > src", dgs,
                                              self.fields)
+            dgs, self.fields = set_if_exists(result, "fail", dgs,
+                                             self.fields)            
             dgs, self.fields = set_if_exists(result, "lat", dgs, self.fields)
 
             wfs, self.fields = set_if_exists(result, "with-fixed-size", wfs,
@@ -369,6 +377,8 @@ class JsonFile():
                                              self.fields)
             sz, self.fields = set_if_exists(result, "invert_pos", sz,
                                             self.fields)
+            sz, self.fields = set_if_exists(result, "len_needle", sz,
+                                            self.fields)            
 
             sz, self.fields = set_if_exists(result, "overlap", sz, self.fields)
             sz, self.fields = set_if_exists(result, "size", sz, self.fields)
@@ -391,7 +401,7 @@ class JsonFile():
             self.all_results[key].add_times(result["timings"])
 
     def parse_all_files(self):
-        for i in range(0, 100):
+        for i in range(0, 5):
             file_path = self.file_fmt.format(i)
             json_obj = self.load_file(file_path)
             if json_obj is None:

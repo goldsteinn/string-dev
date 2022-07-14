@@ -107,9 +107,9 @@ L(page_cross_continue):
 	VMOVU	(%rsi), %ymm0
 	VPCMPEQ	%ymm0, %ymm7, %ymm6
 	vpmovmskb %ymm6, %ecx
-
+# ifndef USE_AS_STPCPY
 	movq	%rdi, %rax
-
+# endif
 	cmpq	$(VEC_SIZE - 1), %rdx
 	/* `jb` because length rdx is now length - 1.  */
 	jbe	L(less_1x_vec)
@@ -143,22 +143,29 @@ L(last_4x_vec):
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x1)
 
-	VMOVA	VEC_SIZE(%rsi), %ymm2
+	VPCMPEQ	VEC_SIZE(%rsi), %ymm7, %ymm6
 	VMOVU	%ymm1, (%rdi)
-	VPCMPEQ	%ymm2, %ymm7, %ymm6
 	vpmovmskb %ymm6, %ecx
 	shlq	$32, %rcx
 L(ret_vec_x1_len):
 	tzcntq	%rcx, %rcx
-	cmpl	%edx, %ecx
-	ja	L(ret_vec_x1_len_no_zfill)
+	cmpl	%ecx, %edx
+	jbe	L(ret_vec_x1_len_no_zfill)
 	/* Fall through (expectation) is copy len < buffer len.  */
 	VMOVU	%ymm7, ((0)-(VEC_SIZE - 1))(%rdi, %rdx)
 L(ret_vec_x1_len_no_zfill_mov):
 	movl	%ecx, %edx
+# ifdef USE_AS_STPCPY
+	/* clear flags.  */
+	xorl	%ecx, %ecx
+# endif
 L(ret_vec_x1_len_no_zfill):
 	VMOVU	((0)-(VEC_SIZE - 1))(%rsi, %rdx), %ymm1
 	VMOVU	%ymm1, ((0)-(VEC_SIZE - 1))(%rdi, %rdx)
+# ifdef USE_AS_STPCPY
+	movl	%edx, %eax
+	adcq	%rdi, %rax
+# endif
 	VZEROUPPER_RETURN
 
 	.p2align 4,, 6
@@ -170,9 +177,12 @@ L(ret_vec_x1):
 	jb	L(ret_vec_x1_len_no_zfill_mov)
 	VMOVU	%ymm1, (%rdi)
 	VMOVU	%ymm7, (%rdi, %rcx)
+# ifdef USE_AS_STPCPY
+	leaq	(%rdi, %rcx), %rax
+# endif
 	VZEROUPPER_RETURN
 
-	.p2align 4,, 8
+	.p2align 4,, 12
 L(more_2x_vec):
 	VMOVU	%ymm1, (%rdi)
 	testl	%ecx, %ecx
@@ -195,40 +205,66 @@ L(more_2x_vec):
 	cmpq	$(VEC_SIZE * 4 - 1), %rdx
 	ja	L(more_4x_vec)
 
-	cmpl	$(VEC_SIZE * 3), %edx
+	subl	$(VEC_SIZE * 3), %edx
 	jb	L(ret_vec_x3_len)
 
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x3)
 
-	VMOVA	(VEC_SIZE * 3)(%rsi), %ymm4
+	VPCMPEQ	(VEC_SIZE * 3)(%rsi), %ymm7, %ymm6
 	VMOVU	%ymm3, (VEC_SIZE * 2)(%rdi)
-	VPCMPEQ	%ymm4, %ymm7, %ymm6
 	vpmovmskb %ymm6, %ecx
-	shlq	$32, %rcx
+	tzcntl	%ecx, %ecx
+	cmpl	%ecx, %edx
+	jbe	L(ret_vec_x4_len_no_zfill)
+	/* Fall through (expectation) is copy len < buffer len.  */
+	VMOVU	%ymm7, ((VEC_SIZE * 3)-(VEC_SIZE - 1))(%rdi, %rdx)
+	movl	%ecx, %edx
+L(ret_vec_x4_len_no_zfill):
+	VMOVU	((VEC_SIZE * 3)-(VEC_SIZE - 1))(%rsi, %rdx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 3)-(VEC_SIZE - 1))(%rdi, %rdx)
+# ifdef USE_AS_STPCPY
+	leal	(VEC_SIZE * 3 + 0)(%edx), %eax
+	adcq	%rdi, %rax
+# endif
+	VZEROUPPER_RETURN
+
+
 L(ret_vec_x3_len):
-	subl	$(VEC_SIZE * 2), %edx
-	tzcntq	%rcx, %rcx
-	cmpl	%edx, %ecx
-	ja	L(ret_vec_x3_len_no_zfill)
+	addl	$(VEC_SIZE * 1), %edx
+	tzcntl	%ecx, %ecx
+	cmpl	%ecx, %edx
+	jbe	L(ret_vec_x3_len_no_zfill)
 	/* Fall through (expectation) is copy len < buffer len.  */
 	VMOVU	%ymm7, ((VEC_SIZE * 2)-(VEC_SIZE - 1))(%rdi, %rdx)
 L(ret_vec_x3_len_no_zfill_mov):
 	movl	%ecx, %edx
+# ifdef USE_AS_STPCPY
+	/* clear flags.  */
+	xorl	%ecx, %ecx
+# endif
+	.p2align 4,, 4
 L(ret_vec_x3_len_no_zfill):
 	VMOVU	((VEC_SIZE * 2)-(VEC_SIZE - 1))(%rsi, %rdx), %ymm1
 	VMOVU	%ymm1, ((VEC_SIZE * 2)-(VEC_SIZE - 1))(%rdi, %rdx)
+# ifdef USE_AS_STPCPY
+	leal	(VEC_SIZE * 2 + 0)(%rdx), %eax
+	adcq	%rdi, %rax
+# endif
 	VZEROUPPER_RETURN
+
 
 	.p2align 4,, 8
 L(ret_vec_x3):
 	bsfl	%ecx, %ecx
-	VMOVU	%ymm7, (-(VEC_SIZE - 1))(%rdi, %rdx)
+	VMOVU	%ymm7, (VEC_SIZE * 3 +(-(VEC_SIZE - 1)))(%rdi, %rdx)
 	subl	%ecx, %edx
-	cmpl	$(VEC_SIZE * 3), %edx
-	jb	L(ret_vec_x3_len_no_zfill_mov)
+	jl	L(ret_vec_x3_len_no_zfill_mov)
 	VMOVU	%ymm3, (VEC_SIZE * 2)(%rdi)
 	VMOVU	%ymm7, (VEC_SIZE * 2)(%rdi, %rcx)
+# ifdef USE_AS_STPCPY
+	leaq	(VEC_SIZE * 2)(%rdi, %rcx), %rax
+# endif
 	VZEROUPPER_RETURN
 
 	.p2align 4,, 8
@@ -327,16 +363,20 @@ L(loop_4x_done):
 
 	// Zfill more....
 
-
+	.p2align 4,, 4
 L(zfill_vec4):
-    addq    $(VEC_SIZE * 2), %rdi
-    subq    $(VEC_SIZE * 2), %rdx
+	addq	$(VEC_SIZE * 2), %rdi
+	subq	$(VEC_SIZE * 2), %rdx
 L(zfill_vec2):
 	shlq	$32, %rcx
 L(zfill):
 	bsfq	%rcx, %rcx
-	addq	%rcx, %rdi
 	subq	%rcx, %rdx
+	addq	%rcx, %rdi
+# ifdef USE_AS_STPCPY
+	movq	%rdi, %rax
+# endif
+L(zfill_from_page_cross):
 	cmpq	$VEC_SIZE, %rdx
 	jb	L(zfill_less_vec_vzeroupper)
 
@@ -345,23 +385,25 @@ L(zfill_more_1x_vec):
 	VMOVU	%ymm7, (1 - VEC_SIZE)(%rdi, %rdx)
 	cmpq	$(VEC_SIZE * 2), %rdx
 	jae	L(zfill_more_2x_vec)
-L(zfill_done):
+L(zfill_done0):
 	VZEROUPPER_RETURN
 
-
+	.p2align 4,, 8
 L(zfill_vec3):
-    addq    $(VEC_SIZE * 2), %rdi
-    subq    $(VEC_SIZE * 2), %rdx
+	addq	$(VEC_SIZE * 2), %rdi
+	subq	$(VEC_SIZE * 2), %rdx
+	.p2align 4,, 2
 L(zfill_vec1):
 	bsfl	%ecx, %ecx
 	addq	%rcx, %rdi
 	subq	%rcx, %rdx
+# ifdef USE_AS_STPCPY
+	movq	%rdi, %rax
+# endif
 	VMOVU	%ymm7, 1(%rdi)
 	VMOVU	%ymm7, (1 - VEC_SIZE)(%rdi, %rdx)
 	cmpq	$(VEC_SIZE * 2), %rdx
-	jae	L(zfill_more_2x_vec)
-	VZEROUPPER_RETURN
-
+	jb	L(zfill_done0)
 L(zfill_more_2x_vec):
 	VMOVU	%ymm7, (1 - VEC_SIZE * 2)(%rdi, %rdx)
 	VMOVU	%ymm7, (VEC_SIZE + 1)(%rdi)
@@ -390,13 +432,23 @@ L(zfill_loop_4x_vec):
 	subq	$-(VEC_SIZE * 4), %rdi
 	cmpq	%rdi, %rdx
 	ja	L(zfill_loop_4x_vec)
+L(zfill_done):
 	VZEROUPPER_RETURN
 
 
+	.p2align 4,, 8
+L(copy_1x):
+	VMOVU	%ymm0, (%rdi)
+	testl	%ecx, %ecx
+	jz	L(ret_32_32)
 L(zfill_less_vec):
 	bsfl	%ecx, %ecx
+L(zfill_less_vec_no_bsf):
 	subq	%rcx, %rdx
 	addq	%rcx, %rdi
+# ifdef USE_AS_STPCPY
+	movq	%rdi, %rax
+# endif
 L(zfill_less_vec_vzeroupper):
 	vzeroupper
 	/* We are taking advantage of the fact that to be here we must
@@ -407,55 +459,60 @@ L(zfill_less_vec_vzeroupper):
 	VMOVU	%xmm7, (%rdi)
 	VMOVU	%xmm7, -15(%rdi, %rdx)
 	ret
+# ifdef USE_AS_STPCPY
+L(ret_32_32):
+	leaq	1(%rdi, %rdx), %rax
+	VZEROUPPER_RETURN
+# endif
 
-	.p2align 4
-L(zfill_less_16_setup):
-	bsfl	%ecx, %ecx
+	.p2align 4,, 4
+L(copy_16_31):
+	/* Overfill to avoid branches.  */
+	VMOVU	-15(%rsi, %rdx), %xmm1
+	VMOVU	%xmm0, (%rdi)
+	VMOVU	%xmm1, -15(%rdi, %rdx)
+	cmpl	%ecx, %edx
+	ja	L(zfill_less_vec_no_bsf)
+# ifndef USE_AS_STPCPY
+L(ret_32_32):
+# else
+	movl	%edx, %eax
+	adcq	%rdi, %rax
+# endif
+	VZEROUPPER_RETURN
+
+	.p2align 4,, 4
+L(copy_8_15):
+	/* Overfill to avoid branches.  */
+	movq	-7(%rsi, %rdx), %rsi
+	vmovq	%xmm0, (%rdi)
+	movq	%rsi, -7(%rdi, %rdx)
+	cmpl	%ecx, %edx
+	jbe	L(ret_8_15)
 	subq	%rcx, %rdx
 	addq	%rcx, %rdi
 	xorl	%ecx, %ecx
+# ifdef USE_AS_STPCPY
+	movq	%rdi, %rax
+# endif
 	.p2align 4,, 8
 L(zfill_less_16):
 	xorl	%ecx, %ecx
-
 	cmpl	$8, %edx
 	jb	L(zfill_less_8)
 	movq	%rcx, (%rdi)
 	movq	%rcx, -7(%rdi, %rdx)
+# ifndef USE_AS_STPCPY
+L(ret_8_15):
+# endif
 	ret
 
-	.p2align 4
-L(zfill_less_8_setup):
-	bsfl	%ecx, %ecx
-	subq	%rcx, %rdx
-	addq	%rcx, %rdi
-	xorl	%ecx, %ecx
-	.p2align 4,, 8
-L(zfill_less_8):
-	cmpl	$3, %edx
-	jb	L(zfill_less_3)
-
-	movl	%ecx, (%rdi)
-	movl	%ecx, -3(%rdi, %rdx)
-	ret
-
-L(zfill_less_3):
-	cmpl	$1, %edx
-	jbe	L(zfill_1)
-	movw	%cx, (%rdi)
-L(zfill_1):
-	movb	%cl, (%rdi, %rdx)
-	ret
-
-L(copy_1x):
-	VMOVU	%ymm0, (%rdi)
-	testl	%ecx, %ecx
-	jnz	L(zfill_less_vec)
-	VZEROUPPER_RETURN
 
 	.p2align 4,, 8
 L(less_1x_vec):
 	je	L(copy_1x)
+
+	tzcntl	%ecx, %ecx
 	cmpl	$16, %edx
 	jae	L(copy_16_31)
 
@@ -467,93 +524,122 @@ L(less_1x_vec):
 	jb	L(copy_0_3)
 	/* Overfill to avoid branches.  */
 	movl	-3(%rsi, %rdx), %esi
-	bzhil	%edx, %ecx, %r8d
 	vmovd	%xmm0, (%rdi)
 	movl	%esi, -3(%rdi, %rdx)
-	/* Can't macrofuse anyways.  */
-	jnz	L(zfill_less_8_setup)
+	cmpl	%ecx, %edx
+	jbe	L(ret_4_7)
+	subq	%rcx, %rdx
+	addq	%rcx, %rdi
+# ifdef USE_AS_STPCPY
+	movq	%rdi, %rax
+# endif
+	xorl	%ecx, %ecx
+	.p2align 4,, 8
+L(zfill_less_8):
+	cmpl	$3, %edx
+	jb	L(zfill_less_3)
+	movl	%ecx, (%rdi)
+	movl	%ecx, -3(%rdi, %rdx)
+# ifdef USE_AS_STPCPY
+	ret
+# endif
+
+L(ret_4_7):
+# ifdef USE_AS_STPCPY
+L(ret_8_15):
+	movl	%edx, %eax
+	adcq	%rdi, %rax
+# endif
 	ret
 
 	.p2align 4,, 4
-L(copy_8_15):
-	/* Overfill to avoid branches.  */
-	movq	-7(%rsi, %rdx), %rsi
-	bzhil	%edx, %ecx, %r8d
-	vmovq	%xmm0, (%rdi)
-	movq	%rsi, -7(%rdi, %rdx)
-	/* Can't macrofuse anyways.  */
-	jnz	L(zfill_less_16_setup)
+L(zfill_less_3):
+	testl	%edx, %edx
+	jz	L(zfill_1)
+	movw	%cx, (%rdi)
+L(zfill_1):
+	movb	%cl, (%rdi, %rdx)
 	ret
 
-	.p2align 4,, 4
-L(copy_16_31):
-	/* Overfill to avoid branches.  */
-	VMOVU	-15(%rsi, %rdx), %xmm1
-	bzhil	%edx, %ecx, %r8d
-	VMOVU	%xmm0, (%rdi)
-	VMOVU	%xmm1, -15(%rdi, %rdx)
-	/* Can't macrofuse anyways.  */
-	jnz	L(zfill_less_vec)
-	VZEROUPPER_RETURN
 
-	.p2align 4,, 4
+	.p2align 4,, 8
 L(copy_0_3):
 	vmovd	%xmm0, %r8d
 	testl	%edx, %edx
 	jz	L(copy_1)
-	bzhil	%edx, %ecx, %r9d
 	movw	%r8w, (%rdi)
-	jnz	L(zfill_from_1)
+	cmpl	%ecx, %edx
+	ja	L(zfill_from_1)
 	movzbl	(%rsi, %rdx), %r8d
+# ifdef USE_AS_STPCPY
+	movl	%edx, %eax
+	adcq	%rdi, %rax
+	movb	%r8b, (%rdi, %rdx)
+	ret
+# endif
+
 L(copy_1):
-	movb	%r8b, (%rax, %rdx)
+# ifdef USE_AS_STPCPY
+	movl	%edx, %eax
+	cmpl	%ecx, %edx
+	adcq	%rdi, %rax
+# endif
+	movb	%r8b, (%rdi, %rdx)
 	ret
 
+	.p2align 4,, 2
+L(zero_len):
+	movq	%rdi, %rax
+	ret
 
-	.p2align 4,, 4
+	.p2align 4,, 8
 L(zfill_from_1):
-	bsfl	%ecx, %ecx
-	movb	$0, 1(%rdi, %rcx)
-	movb	$0, (%rdi, %rdx)
+# ifdef USE_AS_STPCPY
+	leaq	(%rdi, %rcx), %rax
+# endif
+	movw	$0, -1(%rdi, %rdx)
 	ret
+
 
 	.p2align 4,, 4
 	.p2align 6,, 8
 L(page_cross):
-	movq	%rsi, %r8
-	andq	$(VEC_SIZE * -1), %r8
+	movq	%rsi, %rax
+	andq	$(VEC_SIZE * -1), %rax
 
-	VPCMPEQ	(%r8), %ymm7, %ymm6
+	VPCMPEQ	(%rax), %ymm7, %ymm6
 
 	vpmovmskb %ymm6, %ecx
 	shrxl	%esi, %ecx, %ecx
 
-	subl	%esi, %r8d
-	andl	$(VEC_SIZE - 1), %r8d
-	cmpq	%r8, %rdx
+	subl	%esi, %eax
+	andl	$(VEC_SIZE - 1), %eax
+	shll	%ecx
+	cmpq	%rax, %rdx
 	jb	L(page_cross_small)
 	/* Optimizing aggressively for space as this is very cold code.
 	   This saves 2x cache lines.  */
 
-	shll	%ecx
+	testl	%ecx, %ecx
 	jz	L(page_cross_continue)
 	bsfl	%ecx, %ecx
+L(movsb_and_zfill):
+	subq	%rcx, %rdx
+	movq	%rdi, %rax
 	rep	movsb
-	VZEROUPPER_RETURN
+	movb	$0, (%rdi)
+	jmp	L(zfill_from_page_cross)
+
 
 L(page_cross_small):
 	tzcntl	%ecx, %ecx
 	cmpq	%rdx, %rcx
-	cmova	%edx, %ecx
-	incl	%ecx
+	jbe	L(movsb_and_zfill)
+	leal	1(%rdx), %ecx
+	movq	%rdi, %rax
 	rep	movsb
 	VZEROUPPER_RETURN
 
-L(zero_len):
-	incq	%rdx
-	jnz	strcat_avx2_dev
-	movq	%rdi, %rax
-	ret
 
 END(STRCPY)
 #endif

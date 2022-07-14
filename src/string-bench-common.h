@@ -238,5 +238,17 @@ wmemchr_bench_init(bench_info_t * bench_info) {
 #define strlcpy_bench_init empty_bench_init
 #define strlcat_bench_init empty_bench_init
 
+#define wcscpy_bench_init  empty_bench_init
+#define wcscat_bench_init  empty_bench_init
+#define wcpcpy_bench_init  empty_bench_init
+#define wcsncpy_bench_init empty_bench_init
+#define wcsncat_bench_init empty_bench_init
+#define wcpncpy_bench_init empty_bench_init
+#define wcslcpy_bench_init empty_bench_init
+#define wcslcat_bench_init empty_bench_init
+
+
+#define memset_bench_init empty_bench_init
+
 
 #endif

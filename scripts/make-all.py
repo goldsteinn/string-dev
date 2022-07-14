@@ -26,6 +26,7 @@ class Strcpy_Namer():
 
         if in_arr_ele("WCS", use_as):
             prefix = "wc"
+            pcpy = "s"
         if in_arr_ele("STP", use_as):
             pcpy = "p"
         if in_arr_ele("STRN", use_as):
@@ -90,7 +91,8 @@ for who in ["dev", "glibc"]:
                 if "NCPY" in impl_len and "CAT" in impl_type:
                     impl_len = "USE_AS_STRNCAT"
                 builders.append(
-                    Builder(ext, [impl_type, impl_len], who, Strcpy_Namer()))
+                    Builder(ext, ["USE_AS_WCSCPY", impl_type, impl_len], who,
+                            Strcpy_Namer()))
 
 for builder in builders:
     builder.build()
