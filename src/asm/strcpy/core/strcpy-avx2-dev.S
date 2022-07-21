@@ -30,9 +30,11 @@
 # ifdef USE_AS_WCSCPY
 #  define VPCMPEQ	vpcmpeqd
 #  define VPMIN	vpminud
+#  define CHAR_SIZE	4
 # else
 #  define VPCMPEQ	vpcmpeqb
 #  define VPMIN	vpminub
+#  define CHAR_SIZE	1
 # endif
 
 # define VMOVU	vmovdqu
@@ -49,7 +51,7 @@
 #  define END_REG	rdi, %rdx
 # endif
 # ifndef USE_AS_STRCAT
-//#  define USE_AS_STRCAT
+	// #  define USE_AS_STRCAT
 # endif
 # ifdef USE_AS_STRCAT
 #  define PAGE_ALIGN_REG	ecx
@@ -61,7 +63,6 @@
 	.section SECTION(.text), "ax", @progbits
 ENTRY(STRCPY)
 	vpxor	%xmm7, %xmm7, %xmm7
-
 
 # ifdef USE_AS_STRCAT
 	/* Paired down strlen implementation.  We never commit to 4x
@@ -77,13 +78,13 @@ ENTRY(STRCPY)
 	jnz	L(bsf_and_done_v0)
 
 
-	VPCMPEQ	VEC_SIZE(%rax), %ymm7, %ymm0
+	VPCMPEQ	VEC_SIZE(%rdx), %ymm7, %ymm0
 	vpmovmskb %ymm0, %ecx
-	leaq	(VEC_SIZE)(%rax), %rdi
+	leaq	(VEC_SIZE)(%rdx), %rdi
 	testl	%ecx, %ecx
 	jnz	L(bsf_and_done_v0)
 
-	VPCMPEQ	(VEC_SIZE * 2)(%rax), %ymm7, %ymm0
+	VPCMPEQ	(VEC_SIZE * 2)(%rdx), %ymm7, %ymm0
 	vpmovmskb %ymm0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(bsf_and_done_v1)
@@ -100,7 +101,7 @@ L(loop_2x_vec):
 	jz	L(loop_2x_vec)
 
 	addq	$(VEC_SIZE * -2 + 1), %rdi
-    
+
 	VPCMPEQ	%ymm0, %ymm7, %ymm0
 	vpmovmskb %ymm0, %ecx
 	testl	%ecx, %ecx
@@ -144,7 +145,11 @@ L(page_cross_continue):
 
 	testb	%cl, %cl
 	jz	L(copy_8_15)
-
+# ifdef USE_AS_WCSCPY
+	vmovd	%xmm0, (%rdi)
+	movl	$0, (%END_REG)
+	ret
+# else
 	andl	$0x7, %ecx
 	jz	L(copy_4_7)
 
@@ -166,18 +171,23 @@ L(copy_4_7):
 	vmovd	%xmm0, (%rdi)
 	movl	%ecx, -3(%END_REG)
 	ret
+# endif
 
 	.p2align 4,, 10
 L(copy_16_31):
-	VMOVU	-15(%rsi, %rdx), %xmm1
+	VMOVU	-(16 - CHAR_SIZE)(%rsi, %rdx), %xmm1
 	VMOVU	%xmm0, (%rdi)
-	VMOVU	%xmm1, -15(%END_REG)
+	VMOVU	%xmm1, -(16 - CHAR_SIZE)(%END_REG)
 	ret
 	.p2align 4,, 10
 L(copy_8_15):
-	movq	-7(%rsi, %rdx), %rcx
+# ifdef USE_AS_WCSCPY
+	movl	-(8 - CHAR_SIZE)(%rsi, %rdx), %ecx
+# else
+	movq	-(8 - CHAR_SIZE)(%rsi, %rdx), %rcx
+# endif
 	vmovq	%xmm0, (%rdi)
-	movq	%rcx, -7(%END_REG)
+	movq	%rcx, -(8 - CHAR_SIZE)(%END_REG)
 	ret
 
 	.p2align 4,, 8
@@ -200,8 +210,8 @@ L(more_1x_vec):
 	.p2align 4,, 1
 L(ret_vec_x1):
 	bsfl	%ecx, %ecx
-	VMOVU	(1 -(VEC_SIZE - 1))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, (1 -(VEC_SIZE - 1))(%rdi, %rcx)
+	VMOVU	(1 -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, (1 -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 # ifdef USE_AS_STPCPY
 	leaq	1(%rcx, %rdi), %rax
 # endif
@@ -228,8 +238,8 @@ L(more_2x_vec):
 	.p2align 4,, 1
 L(ret_vec_x3):
 	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE * 2 + 1)-(VEC_SIZE - 1))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 2 + 1)-(VEC_SIZE - 1))(%rdi, %rcx)
+	VMOVU	((VEC_SIZE * 2 + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 2 + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 # ifdef USE_AS_STPCPY
 	leaq	(VEC_SIZE * 2 + 1)(%rcx, %rdi), %rax
 # endif
@@ -238,8 +248,8 @@ L(ret_vec_x3):
 	.p2align 4,, 4
 L(ret_vec_x2):
 	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE + 1)-(VEC_SIZE - 1))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE + 1)-(VEC_SIZE - 1))(%rdi, %rcx)
+	VMOVU	((VEC_SIZE + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 # ifdef USE_AS_STPCPY
 	leaq	(VEC_SIZE * 1 + 1)(%rcx, %rdi), %rax
 # endif
@@ -248,10 +258,10 @@ L(ret_vec_x2):
 	.p2align 4,, 4
 L(ret_vec_x4):
 	bsfl	%edx, %edx
-	VMOVU	((VEC_SIZE * 3 + 1)-(VEC_SIZE - 1))(%rsi, %rdx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 3 + 1)-(VEC_SIZE - 1))(%rdi, %rdx)
+	VMOVU	((VEC_SIZE * 3 + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rdx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 3 + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rdx)
 #  ifdef USE_AS_STPCPY
-	leaq	(VEC_SIZE * 3 + 1)(%rcx, %rdi), %rax
+	leaq	(VEC_SIZE * 3 + 1)(%rdx, %rdi), %rax
 #  endif
 	VZEROUPPER_RETURN
 # endif
@@ -337,8 +347,8 @@ L(loop_4x_done):
 L(ret_vec_x4):
 # endif
 	bsfl	%edx, %edx
-	VMOVU	((VEC_SIZE * 3 + 1)-(VEC_SIZE - 1))(%rsi, %rdx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 3 + 1)-(VEC_SIZE - 1))(%rdi, %rdx)
+	VMOVU	((VEC_SIZE * 3 + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rdx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 3 + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rdx)
 # ifdef USE_AS_STPCPY
 	leaq	(VEC_SIZE * 3 + 1)(%rdx, %rdi), %rax
 # endif
@@ -357,8 +367,7 @@ L(page_cross):
 # if 1
 	/* Optimizing aggressively for space as this is very cold code.
 	   This saves 2x cache lines.  */
-
-	shll	%ecx
+	shll	$CHAR_SIZE, %ecx
 	jz	L(page_cross_continue)
 #  if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
 	movq	%rdi, %rax
@@ -366,7 +375,7 @@ L(page_cross):
 	bsfl	%ecx, %ecx
 	rep	movsb
 #  ifdef USE_AS_STPCPY
-	leaq	-1(%rdi), %rax
+	leaq	-CHAR_SIZE(%rdi), %rax
 #  endif
 
 #  if defined USE_AS_STPCPY || defined USE_AS_STRCAT

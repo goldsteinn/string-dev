@@ -31,15 +31,18 @@
 # ifdef USE_AS_WCSCPY
 #  define VPCMPEQ	vpcmpeqd
 #  define VPMIN	vpminud
+#  define CHAR_SIZE	4
 # else
 #  define VPCMPEQ	vpcmpeqb
 #  define VPMIN	vpminub
+#  define CHAR_SIZE	1
 # endif
 
 # define VMOVU	vmovdqu
 # define VMOVA	vmovdqa
 
 # define VEC_SIZE	32
+# define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
 # define PAGE_SIZE	4096
 # ifndef USE_AS_STPCPY
 	// #  define USE_AS_STPCPY
@@ -93,11 +96,18 @@ ENTRY(STRCPY)
 	   length strings just return, very long strings are handled
 	   either by using the non-length variant which has lower
 	   overhead or causing a segfault (strncpy).  */
+# ifdef USE_AS_WCSCPY
+	decq	%rdx
+	movq	%rdx, %rax
+	shr	$60, %rax
+	jnz	L(zero_len)
+	salq	$2, %rdx
+# else
 	decq	%rdx
 	/* `dec` can macrofuse with `jl`. If the flag needs to become
 	   `jb` replace `dec` with `sub`.  */
 	jl	L(zero_len)
-
+# endif
 
 	vpxor	%xmm7, %xmm7, %xmm7
 # ifdef USE_AS_STRCAT
@@ -162,11 +172,10 @@ L(page_cross_continue):
 	VPCMPEQ	%ymm0, %ymm7, %ymm6
 	vpmovmskb %ymm6, %ecx
 
-# ifdef USE_AS_STRN
 	cmpq	$VEC_SIZE, %rdx
 	/* `jb` because length rdx is now length - 1.  */
 	jb	L(less_1x_vec)
-# endif
+
 	testl	%ecx, %ecx
 	jz	L(more_1x_vec)
 
@@ -182,6 +191,7 @@ L(copy_less_16):
 	testb	%cl, %cl
 	jz	L(copy_8_15)
 
+# ifndef USE_AS_WCSCPY
 	andl	$0x7, %ecx
 	jz	L(copy_4_7)
 
@@ -190,21 +200,23 @@ L(copy_less_16):
 	jz	L(set_null_term)
 	movw	%cx, (%rdi)
 	movzbl	(%rsi, %rdx), %ecx
-# ifdef USE_AS_STPCPY
+#  ifdef USE_AS_STPCPY
 	/* This only applies for stpcpy where we save a few bytes in
 	   L(copy_...) because END_REG doesn't need an index.  */
 	.p2align 4,, 1
-# endif
+#  endif
 L(set_null_term):
 	movb	%cl, (%END_REG)
 	ret
 
 	.p2align 4,, 11
 L(copy_4_7):
-	movl	-3(%rsi, %rdx), %ecx
+# endif
+	movl	-(4 - CHAR_SIZE)(%rsi, %rdx), %ecx
 	vmovd	%xmm0, (%rdi)
-	movl	%ecx, -3(%END_REG)
+	movl	%ecx, -(4 - CHAR_SIZE)(%END_REG)
 	ret
+
 
 	.p2align 4,, 4
 L(less_1x_vec):
@@ -217,16 +229,16 @@ L(less_1x_vec):
 
 	.p2align 4,, 10
 L(copy_16_31):
-	VMOVU	-15(%rsi, %rdx), %xmm1
+	VMOVU	-(16 - CHAR_SIZE)(%rsi, %rdx), %xmm1
 	VMOVU	%xmm0, (%rdi)
-	VMOVU	%xmm1, -15(%END_REG)
+	VMOVU	%xmm1, -(16 - CHAR_SIZE)(%END_REG)
 	ret
 
 	.p2align 4,, 10
 L(copy_8_15):
-	movq	-7(%rsi, %rdx), %rcx
+	movq	-(8 - CHAR_SIZE)(%rsi, %rdx), %rcx
 	vmovq	%xmm0, (%rdi)
-	movq	%rcx, -7(%END_REG)
+	movq	%rcx, -(8 - CHAR_SIZE)(%END_REG)
 	ret
 
 	.p2align 4,, 8
@@ -235,7 +247,6 @@ L(more_1x_vec):
 # if defined USE_AS_STPCPY || defined USE_AS_STRCAT
 	VMOVU	%ymm0, (%rdi)
 # endif
-
 
 	addq	%rsi, %rdx
 	subq	%rsi, %rdi
@@ -269,8 +280,8 @@ L(ret_vec_x2_len):
 	.p2align 4,, 3
 L(ret_vec_x2):
 	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE + 0)-(VEC_SIZE - 1))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE + 0)-(VEC_SIZE - 1))(%rdi, %rcx)
+	VMOVU	((VEC_SIZE + 0)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 	VZEROUPPER_RETURN
 
 
@@ -279,8 +290,8 @@ L(ret_vec_x1_len):
 	btsl	%edx, %ecx
 L(ret_vec_x1):
 	bsfl	%ecx, %ecx
-	VMOVU	(0 -(VEC_SIZE - 1))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, (0 -(VEC_SIZE - 1))(%rdi, %rcx)
+	VMOVU	(0 -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, (0 -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 	VZEROUPPER_RETURN
 
 
@@ -323,8 +334,8 @@ L(ret_vec_x4_len):
 	btsl	%edx, %ecx
 L(ret_vec_x4):
 	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE * 3 + 0)-(VEC_SIZE - 1))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 3 + 0)-(VEC_SIZE - 1))(%rdi, %rcx)
+	VMOVU	((VEC_SIZE * 3 + 0)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 3 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 	VZEROUPPER_RETURN
 
 
@@ -333,8 +344,8 @@ L(ret_vec_x3_len):
 	btsl	%edx, %ecx
 L(ret_vec_x3):
 	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE * 2 + 0)-(VEC_SIZE - 1))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 2 + 0)-(VEC_SIZE - 1))(%rdi, %rcx)
+	VMOVU	((VEC_SIZE * 2 + 0)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 2 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 	VZEROUPPER_RETURN
 
 
@@ -433,8 +444,8 @@ L(loop_4x_done):
 L(ret_vec_x4):
 # endif
 	bsfl	%r8d, %r8d
-	VMOVU	((VEC_SIZE * 3 + 0)-(VEC_SIZE - 1))(%rsi, %r8), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 3 + 0)-(VEC_SIZE - 1))(%rdi, %r8)
+	VMOVU	((VEC_SIZE * 3 + 0)-(VEC_SIZE - CHAR_SIZE))(%rsi, %r8), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 3 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %r8)
 L(return_end):
 	VZEROUPPER_RETURN
 
@@ -457,7 +468,7 @@ L(page_cross):
 	/* Optimizing aggressively for space as this is very cold code.
 	   This saves 2x cache lines.  */
 
-	shll	%ecx
+	shll	$CHAR_SIZE, %ecx
 	jz	L(page_cross_continue)
 	bsfl	%ecx, %ecx
 	rep	movsb
@@ -467,7 +478,11 @@ L(page_cross_small):
 	tzcntl	%ecx, %ecx
 	cmpq	%rdx, %rcx
 	cmova	%edx, %ecx
-    incl    %ecx
+#  if USE_AS_WCSCPY
+	addl	$4, %ecx
+#  else
+	incl	%ecx
+#  endif
 	rep	movsb
 	VZEROUPPER_RETURN
 
@@ -532,7 +547,11 @@ L(page_cross_copy_16_31):
 
 L(zero_len):
 	incq	%rdx
+# ifdef USE_AS_WCSCPY
+	jnz	wcscat_avx2_dev
+# else
 	jnz	strcat_avx2_dev
+# endif
 	movq	%rdi, %rax
 	ret
 

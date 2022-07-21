@@ -35,6 +35,15 @@
 
 	.section SECTION(.text),"ax",@progbits
 ENTRY (STRCAT)
+
+# ifdef USE_AS_WCSCPY
+#  if defined USE_AS_STRNCPY || defined USE_AS_STRNCAT
+	jmp	wcsncat
+#  else
+	jmp	wcscat
+#endif
+# endif
+    
 	mov	%rdi, %r9
 # ifdef USE_AS_STRNCAT
 	mov	%rdx, %r8

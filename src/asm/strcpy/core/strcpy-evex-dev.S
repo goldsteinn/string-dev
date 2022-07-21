@@ -1,5 +1,5 @@
-/* strcpy with 256-bit EVEX instructions.
-   Copyright (C) 2021-2022 Free Software Foundation, Inc.
+/* strcpy with AVX2
+   Copyright (C) 2011-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -18,985 +18,464 @@
 #include "../../libc-asm-common.h"
 #if IS_IN (libc)
 
-# ifndef USE_AS_STRCAT
+# include "../../libc-defs/libc-evex-vecs.h"
 
-#  ifndef STRCPY
-#   define STRCPY  __strcpy_evex
-#  endif
-
+# ifndef SECTION
+#  define SECTION(p)	p##.evex
 # endif
 
-# define VMOVU		vmovdqu64
-# define VMOVA		vmovdqa64
 
-/* Number of bytes in a vector register */
-# ifndef VEC_SIZE
-#  define VEC_SIZE	32
-# endif
-
-# define XMM2		xmm18
-# define XMM3		xmm19
-
-# define YMM2		ymm18
-# define YMM3		ymm19
-# define YMM4		ymm20
-# define YMM5		ymm21
-# define YMM6		ymm22
-# define YMM7		ymm23
-
-# ifndef USE_AS_STRCAT
-
-/* zero register */
-#  define XMMZERO	xmm16
-#  define YMMZERO	ymm16
-#  define YMM1		ymm17
-
-	.section .text.evex,"ax",@progbits
-ENTRY (STRCPY)
-#  ifdef USE_AS_STRNCPY
-	mov	%RDX_LP, %R8_LP
-	test	%R8_LP, %R8_LP
-	jz	L(ExitZero)
-#  endif
-	mov	%rsi, %rcx
-#  ifndef USE_AS_STPCPY
-	mov	%rdi, %rax      /* save result */
-#  endif
-
-	vpxorq	%XMMZERO, %XMMZERO, %XMMZERO
-# endif
-
-	and	$((VEC_SIZE * 4) - 1), %ecx
-	cmp	$(VEC_SIZE * 2), %ecx
-	jbe	L(SourceStringAlignmentLessTwoVecSize)
-
-	and	$-VEC_SIZE, %rsi
-	and	$(VEC_SIZE - 1), %ecx
-
-	vpcmpb	$0, (%rsi), %YMMZERO, %k0
-	kmovd	%k0, %edx
-	shr	%cl, %rdx
-
-# ifdef USE_AS_STRNCPY
-#  if defined USE_AS_STPCPY || defined USE_AS_STRCAT
-	mov	$VEC_SIZE, %r10
-	sub	%rcx, %r10
-	cmp	%r10, %r8
-#  else
-	mov	$(VEC_SIZE + 1), %r10
-	sub	%rcx, %r10
-	cmp	%r10, %r8
-#  endif
-	jbe	L(CopyVecSizeTailCase2OrCase3)
-# endif
-	test	%edx, %edx
-	jnz	L(CopyVecSizeTail)
-
-	vpcmpb	$0, VEC_SIZE(%rsi), %YMMZERO, %k1
-	kmovd	%k1, %edx
-
-# ifdef USE_AS_STRNCPY
-	add	$VEC_SIZE, %r10
-	cmp	%r10, %r8
-	jbe	L(CopyTwoVecSizeCase2OrCase3)
-# endif
-	test	%edx, %edx
-	jnz	L(CopyTwoVecSize)
-
-	VMOVU	(%rsi, %rcx), %YMM2   /* copy VEC_SIZE bytes */
-	VMOVU	%YMM2, (%rdi)
-
-/* If source address alignment != destination address alignment */
-	.p2align 4
-L(UnalignVecSizeBoth):
-	sub	%rcx, %rdi
-# ifdef USE_AS_STRNCPY
-	add	%rcx, %r8
-	sbb	%rcx, %rcx
-	or	%rcx, %r8
-# endif
-	mov	$VEC_SIZE, %rcx
-	VMOVA	(%rsi, %rcx), %YMM2
-	VMOVU	%YMM2, (%rdi, %rcx)
-	VMOVA	VEC_SIZE(%rsi, %rcx), %YMM2
-	vpcmpb	$0, %YMM2, %YMMZERO, %k0
-	kmovd	%k0, %edx
-	add	$VEC_SIZE, %rcx
-# ifdef USE_AS_STRNCPY
-	sub	$(VEC_SIZE * 3), %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
-# endif
-	test	%edx, %edx
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec2)
+# ifdef USE_AS_WCSCPY
+#  define VPMIN	vpminud
+#  define VPTESTM	vptestmd
+#  define VPCMPEQ	vpcmpeqd
+#  define CHAR_SIZE	4
 # else
-	jnz	L(CopyVecSize)
+#  define VPMIN	vpminub
+#  define VPTESTM	vptestmb
+#  define VPCMPEQ	vpcmpeqb
+#  define CHAR_SIZE	1
 # endif
 
-	VMOVU	%YMM2, (%rdi, %rcx)
-	VMOVA	VEC_SIZE(%rsi, %rcx), %YMM3
-	vpcmpb	$0, %YMM3, %YMMZERO, %k0
-	kmovd	%k0, %edx
-	add	$VEC_SIZE, %rcx
-# ifdef USE_AS_STRNCPY
-	sub	$VEC_SIZE, %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
-# endif
-	test	%edx, %edx
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec3)
-# else
-	jnz	L(CopyVecSize)
-# endif
 
-	VMOVU	%YMM3, (%rdi, %rcx)
-	VMOVA	VEC_SIZE(%rsi, %rcx), %YMM4
-	vpcmpb	$0, %YMM4, %YMMZERO, %k0
-	kmovd	%k0, %edx
-	add	$VEC_SIZE, %rcx
-# ifdef USE_AS_STRNCPY
-	sub	$VEC_SIZE, %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
+# define VEC_SIZE	32
+# define PAGE_SIZE	4096
+# ifndef USE_AS_STPCPY
+	// #  define USE_AS_STPCPY
 # endif
-	test	%edx, %edx
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec4)
-# else
-	jnz	L(CopyVecSize)
-# endif
-
-	VMOVU	%YMM4, (%rdi, %rcx)
-	VMOVA	VEC_SIZE(%rsi, %rcx), %YMM2
-	vpcmpb	$0, %YMM2, %YMMZERO, %k0
-	kmovd	%k0, %edx
-	add	$VEC_SIZE, %rcx
-# ifdef USE_AS_STRNCPY
-	sub	$VEC_SIZE, %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
-# endif
-	test	%edx, %edx
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec2)
-# else
-	jnz	L(CopyVecSize)
-# endif
-
-	VMOVU	%YMM2, (%rdi, %rcx)
-	VMOVA	VEC_SIZE(%rsi, %rcx), %YMM2
-	vpcmpb	$0, %YMM2, %YMMZERO, %k0
-	kmovd	%k0, %edx
-	add	$VEC_SIZE, %rcx
-# ifdef USE_AS_STRNCPY
-	sub	$VEC_SIZE, %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
-# endif
-	test	%edx, %edx
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec2)
-# else
-	jnz	L(CopyVecSize)
-# endif
-
-	VMOVA	VEC_SIZE(%rsi, %rcx), %YMM3
-	VMOVU	%YMM2, (%rdi, %rcx)
-	vpcmpb	$0, %YMM3, %YMMZERO, %k0
-	kmovd	%k0, %edx
-	add	$VEC_SIZE, %rcx
-# ifdef USE_AS_STRNCPY
-	sub	$VEC_SIZE, %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
-# endif
-	test	%edx, %edx
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec3)
-# else
-	jnz	L(CopyVecSize)
-# endif
-
-	VMOVU	%YMM3, (%rdi, %rcx)
-	mov	%rsi, %rdx
-	lea	VEC_SIZE(%rsi, %rcx), %rsi
-	and	$-(VEC_SIZE * 4), %rsi
-	sub	%rsi, %rdx
-	sub	%rdx, %rdi
-# ifdef USE_AS_STRNCPY
-	lea	(VEC_SIZE * 8)(%r8, %rdx), %r8
-# endif
-L(UnalignedFourVecSizeLoop):
-	VMOVA	(%rsi), %YMM4
-	VMOVA	VEC_SIZE(%rsi), %YMM5
-	VMOVA	(VEC_SIZE * 2)(%rsi), %YMM6
-	VMOVA	(VEC_SIZE * 3)(%rsi), %YMM7
-	vpminub	%YMM5, %YMM4, %YMM2
-	vpminub	%YMM7, %YMM6, %YMM3
-	vpminub	%YMM2, %YMM3, %YMM2
-	/* If K7 != 0, there is a null byte.  */
-	vpcmpb	$0, %YMM2, %YMMZERO, %k7
-	kmovd	%k7, %edx
-# ifdef USE_AS_STRNCPY
-	sub	$(VEC_SIZE * 4), %r8
-	jbe	L(UnalignedLeaveCase2OrCase3)
-# endif
-	test	%edx, %edx
-	jnz	L(UnalignedFourVecSizeLeave)
-
-L(UnalignedFourVecSizeLoop_start):
-	add	$(VEC_SIZE * 4), %rdi
-	add	$(VEC_SIZE * 4), %rsi
-	VMOVU	%YMM4, -(VEC_SIZE * 4)(%rdi)
-	VMOVA	(%rsi), %YMM4
-	VMOVU	%YMM5, -(VEC_SIZE * 3)(%rdi)
-	VMOVA	VEC_SIZE(%rsi), %YMM5
-	vpminub	%YMM5, %YMM4, %YMM2
-	VMOVU	%YMM6, -(VEC_SIZE * 2)(%rdi)
-	VMOVA	(VEC_SIZE * 2)(%rsi), %YMM6
-	VMOVU	%YMM7, -VEC_SIZE(%rdi)
-	VMOVA	(VEC_SIZE * 3)(%rsi), %YMM7
-	vpminub	%YMM7, %YMM6, %YMM3
-	vpminub	%YMM2, %YMM3, %YMM2
-	/* If K7 != 0, there is a null byte.  */
-	vpcmpb	$0, %YMM2, %YMMZERO, %k7
-	kmovd	%k7, %edx
-# ifdef USE_AS_STRNCPY
-	sub	$(VEC_SIZE * 4), %r8
-	jbe	L(UnalignedLeaveCase2OrCase3)
-# endif
-	test	%edx, %edx
-	jz	L(UnalignedFourVecSizeLoop_start)
-
-L(UnalignedFourVecSizeLeave):
-	vpcmpb	$0, %YMM4, %YMMZERO, %k1
-	kmovd	%k1, %edx
-	test	%edx, %edx
-	jnz	L(CopyVecSizeUnaligned_0)
-
-	vpcmpb	$0, %YMM5, %YMMZERO, %k2
-	kmovd	%k2, %ecx
-	test	%ecx, %ecx
-	jnz	L(CopyVecSizeUnaligned_16)
-
-	vpcmpb	$0, %YMM6, %YMMZERO, %k3
-	kmovd	%k3, %edx
-	test	%edx, %edx
-	jnz	L(CopyVecSizeUnaligned_32)
-
-	vpcmpb	$0, %YMM7, %YMMZERO, %k4
-	kmovd	%k4, %ecx
-	bsf	%ecx, %edx
-	VMOVU	%YMM4, (%rdi)
-	VMOVU	%YMM5, VEC_SIZE(%rdi)
-	VMOVU	%YMM6, (VEC_SIZE * 2)(%rdi)
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
 # ifdef USE_AS_STPCPY
-	lea	(VEC_SIZE * 3)(%rdi, %rdx), %rax
-# endif
-	VMOVU	%YMM7, (VEC_SIZE * 3)(%rdi)
-	add	$(VEC_SIZE - 1), %r8
-	sub	%rdx, %r8
-	lea	((VEC_SIZE * 3) + 1)(%rdi, %rdx), %rdi
-	jmp	L(StrncpyFillTailWithZero)
+#  define END_REG	rax
 # else
-	add	$(VEC_SIZE * 3), %rsi
-	add	$(VEC_SIZE * 3), %rdi
-	jmp	L(CopyVecSizeExit)
+#  define END_REG	rdi, %rdx, CHAR_SIZE
+# endif
+# ifndef USE_AS_STRCAT
+	// #  define USE_AS_STRCAT
+# endif
+# ifdef USE_AS_STRCAT
+#  define PAGE_ALIGN_REG	ecx
+# else
+#  define PAGE_ALIGN_REG	eax
 # endif
 
-/* If source address alignment == destination address alignment */
 
-L(SourceStringAlignmentLessTwoVecSize):
-	VMOVU	(%rsi), %YMM3
-	VMOVU	VEC_SIZE(%rsi), %YMM2
-	vpcmpb	$0, %YMM3, %YMMZERO, %k0
-	kmovd	%k0, %edx
+	.section SECTION(.text), "ax", @progbits
+ENTRY(STRCPY)
+	vpxorq	%VEC_xmm(7), %VEC_xmm(7), %VEC_xmm(7)
 
-# ifdef USE_AS_STRNCPY
-#  if defined USE_AS_STPCPY || defined USE_AS_STRCAT
-	cmp	$VEC_SIZE, %r8
-#  else
-	cmp	$(VEC_SIZE + 1), %r8
+# ifdef USE_AS_STRCAT
+	/* Paired down strlen implementation.  We never commit to 4x
+	   loop as we are expecting a relatively short string and want
+	   to minimize code size.  */
+	movq	%rdi, %rdx
+	movq	%rdi, %rax
+	andq	$(VEC_SIZE * -1), %rdx
+	VPCMPEQ	(%rdx), %VEC(7), %k0
+	kmovd	%k0, %ecx
+#  ifdef USE_AS_WCSCPY
+	subl	%edx, %edi
+	shrl	$2, %edi
 #  endif
-	jbe	L(CopyVecSizeTail1Case2OrCase3)
-# endif
-	test	%edx, %edx
-	jnz	L(CopyVecSizeTail1)
-
-	VMOVU	%YMM3, (%rdi)
-	vpcmpb	$0, %YMM2, %YMMZERO, %k0
-	kmovd	%k0, %edx
-
-# ifdef USE_AS_STRNCPY
-#  if defined USE_AS_STPCPY || defined USE_AS_STRCAT
-	cmp	$(VEC_SIZE * 2), %r8
-#  else
-	cmp	$((VEC_SIZE * 2) + 1), %r8
+	shrxl	%edi, %ecx, %ecx
+#  ifdef USE_AS_WCSCPY
+	movq	%rax, %rdi
 #  endif
-	jbe	L(CopyTwoVecSize1Case2OrCase3)
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+
+	VPCMPEQ	VEC_SIZE(%rdx), %VEC(7), %k0
+	kmovd	%k0, %ecx
+	leaq	(VEC_SIZE)(%rdx), %rdi
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+	VPCMPEQ	(VEC_SIZE * 2)(%rdx), %VEC(7), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v1)
+
+	orq	$(VEC_SIZE * 2 - 1), %rdi
+	.p2align 4,, 8
+L(loop_2x_vec):
+	VMOVA	(1)(%rdi), %VEC(0)
+	VPMIN	(VEC_SIZE + 1)(%rdi), %VEC(0), %VEC(1)
+	VPTESTM	%VEC(1), %VEC(1), %k0
+	kmovd	%k0, %edx
+	subq	$(VEC_SIZE * -2), %rdi
+	testl	%edx, %edx
+	jz	L(loop_2x_vec)
+
+	addq	$(VEC_SIZE * -2 + 1), %rdi
+
+	VPTESTM	%VEC(0), %VEC(0), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+	movl	%edx, %ecx
+
+	.p2align 4,, 4
+L(bsf_and_done_v1):
+	addq	$VEC_SIZE, %rdi
+L(bsf_and_done_v0):
+	bsfl	%ecx, %ecx
+#  ifdef USE_AS_WCSCPY
+	leaq	(%rdi, %rcx, CHAR_SIZE), %rdi
+#  else
+	addq	%rcx, %rdi
+#  endif
 # endif
-	test	%edx, %edx
-	jnz	L(CopyTwoVecSize1)
 
-	and	$-VEC_SIZE, %rsi
-	and	$(VEC_SIZE - 1), %ecx
-	jmp	L(UnalignVecSizeBoth)
-
-/*------End of main part with loops---------------------*/
-
-/* Case1 */
-
-# if (!defined USE_AS_STRNCPY) || (defined USE_AS_STRCAT)
-	.p2align 4
-L(CopyVecSize):
-	add	%rcx, %rdi
+	movl	%esi, %PAGE_ALIGN_REG
+	andl	$(PAGE_SIZE - 1), %PAGE_ALIGN_REG
+	cmpl	$(PAGE_SIZE - VEC_SIZE), %PAGE_ALIGN_REG
+	ja	L(page_cross)
+L(page_cross_continue):
+# if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
+	movq	%rdi, %rax
 # endif
-L(CopyVecSizeTail):
-	add	%rcx, %rsi
-L(CopyVecSizeTail1):
-	bsf	%edx, %edx
-L(CopyVecSizeExit):
-	cmp	$32, %edx
-	jae	L(Exit32_63)
-	cmp	$16, %edx
-	jae	L(Exit16_31)
-	cmp	$8, %edx
-	jae	L(Exit8_15)
-	cmp	$4, %edx
-	jae	L(Exit4_7)
-	cmp	$3, %edx
-	je	L(Exit3)
-	cmp	$1, %edx
-	ja	L(Exit2)
-	je	L(Exit1)
-	movb	$0, (%rdi)
+	VMOVU	(%rsi), %VEC(0)
+	VPTESTM	%VEC(0), %VEC(0), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jz	L(more_1x_vec)
+
+	xorl	%edx, %edx
+	bsfl	%ecx, %edx
 # ifdef USE_AS_STPCPY
-	lea	(%rdi), %rax
+	leaq	(%rdi, %rdx, CHAR_SIZE), %rax
 # endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	$1, %r8
-	lea	1(%rdi), %rdi
-	jnz	L(StrncpyFillTailWithZero)
+
+
+# ifdef USE_AS_WCSCPY
+	testb	$0xf, %cl
+# else
+	testw	%cx, %cx
+# endif
+	jz	L(copy_16_31)
+
+# ifdef USE_AS_WCSCPY
+	testb	$0x3, %cl
+# else
+	testb	%cl, %cl
+# endif
+	jz	L(copy_8_15)
+# ifdef USE_AS_WCSCPY
+	vmovd	%VEC_xmm(0), (%rdi)
+	movl	$0, (%END_REG)
+	ret
+# else
+	andl	$0x7, %ecx
+	jz	L(copy_4_7)
+
+	vmovd	%VEC_xmm(0), %ecx
+	testl	%edx, %edx
+	jz	L(set_null_term)
+	movw	%cx, (%rdi)
+
+	/* This only applies for stpcpy where we save a few bytes in
+	   L(copy_...) because END_REG doesn't need an index.  */
+	.p2align 4,, 1
+L(set_null_term):
+	movb	$0, (%END_REG)
+	ret
+
+	.p2align 4,, 12
+L(copy_4_7):
+	movl	-3(%rsi, %rdx), %ecx
+	vmovd	%VEC_xmm(0), (%rdi)
+	movl	%ecx, -3(%END_REG)
+	ret
+# endif
+
+	.p2align 4,, 10
+L(copy_16_31):
+	/* Use xmm1 explicitly here as it won't induce a `vzeroupper`.
+	 */
+	vmovdqu	-(16 - CHAR_SIZE)(%rsi, %rdx), %xmm1
+	VMOVU	%VEC_xmm(0), (%rdi)
+	vmovdqu	%xmm1, -(16 - CHAR_SIZE)(%END_REG)
+	ret
+	.p2align 4,, 10
+L(copy_8_15):
+# ifdef USE_AS_WCSCPY
+	movl	-(8 - CHAR_SIZE)(%rsi, %rdx), %ecx
+# else
+	movq	-(8 - CHAR_SIZE)(%rsi, %rdx), %rcx
+# endif
+	vmovq	%VEC_xmm(0), (%rdi)
+	movq	%rcx, -(8 - CHAR_SIZE)(%END_REG)
+	ret
+
+	.p2align 4,, 8
+	.p2align 6,, 14
+L(more_1x_vec):
+# if defined USE_AS_STPCPY || defined USE_AS_STRCAT
+	VMOVU	%VEC(0), (%rdi)
+# endif
+	subq	%rsi, %rdi
+	andq	$-(VEC_SIZE), %rsi
+	addq	%rsi, %rdi
+	VMOVA	(VEC_SIZE * 1)(%rsi), %VEC(1)
+# if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
+	VMOVU	%VEC(0), (%rax)
+# endif
+	VPTESTM	%VEC(1), %VEC(1), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jz	L(more_2x_vec)
+	.p2align 4,, 1
+L(ret_vec_x1):
+	bsfl	%ecx, %ecx
+	VMOVU	(VEC_SIZE -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VEC(0)
+	VMOVU	%VEC(0), (VEC_SIZE -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
+# ifdef USE_AS_STPCPY
+	leaq	VEC_SIZE(%rdi, %rcx, CHAR_SIZE), %rax
 # endif
 	ret
 
-	.p2align 4
-L(CopyTwoVecSize1):
-	add	$VEC_SIZE, %rsi
-	add	$VEC_SIZE, %rdi
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	$VEC_SIZE, %r8
-# endif
-	jmp	L(CopyVecSizeTail1)
+	.p2align 4,, 8
+	.p2align 6,, 14
+L(more_2x_vec):
+	VMOVA	(VEC_SIZE * 2)(%rsi), %VEC(2)
+	VMOVU	%VEC(1), VEC_SIZE(%rdi)
 
-	.p2align 4
-L(CopyTwoVecSize):
-	bsf	%edx, %edx
-	add	%rcx, %rsi
-	add	$VEC_SIZE, %edx
-	sub	%ecx, %edx
-	jmp	L(CopyVecSizeExit)
+	VPTESTM	%VEC(2), %VEC(2), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jnz	L(ret_vec_x2)
 
-	.p2align 4
-L(CopyVecSizeUnaligned_0):
-	bsf	%edx, %edx
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
+	VMOVA	(VEC_SIZE * 3)(%rsi), %VEC(3)
+	VMOVU	%VEC(2), (VEC_SIZE * 2)(%rdi)
+
+	VPTESTM	%VEC(3), %VEC(3), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jz	L(more_4x_vec)
+	.p2align 4,, 1
+L(ret_vec_x3):
+	bsfl	%ecx, %ecx
+	VMOVU	((VEC_SIZE * 3)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VEC(0)
+	VMOVU	%VEC(0), ((VEC_SIZE * 3)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
 # ifdef USE_AS_STPCPY
-	lea	(%rdi, %rdx), %rax
+	leaq	(VEC_SIZE * 3)(%rdi, %rcx, CHAR_SIZE), %rax
 # endif
-	VMOVU	%YMM4, (%rdi)
-	add	$((VEC_SIZE * 4) - 1), %r8
-	sub	%rdx, %r8
-	lea	1(%rdi, %rdx), %rdi
-	jmp	L(StrncpyFillTailWithZero)
-# else
-	jmp	L(CopyVecSizeExit)
-# endif
+	ret
 
-	.p2align 4
-L(CopyVecSizeUnaligned_16):
-	bsf	%ecx, %edx
-	VMOVU	%YMM4, (%rdi)
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
+	.p2align 4,, 4
+L(ret_vec_x2):
+	bsfl	%ecx, %ecx
+	VMOVU	((VEC_SIZE * 2)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VEC(0)
+	VMOVU	%VEC(0), ((VEC_SIZE * 2)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
 # ifdef USE_AS_STPCPY
-	lea	VEC_SIZE(%rdi, %rdx), %rax
+	leaq	(VEC_SIZE * 2)(%rdi, %rcx, CHAR_SIZE), %rax
 # endif
-	VMOVU	%YMM5, VEC_SIZE(%rdi)
-	add	$((VEC_SIZE * 3) - 1), %r8
-	sub	%rdx, %r8
-	lea	(VEC_SIZE + 1)(%rdi, %rdx), %rdi
-	jmp	L(StrncpyFillTailWithZero)
-# else
-	add	$VEC_SIZE, %rsi
-	add	$VEC_SIZE, %rdi
-	jmp	L(CopyVecSizeExit)
-# endif
+	ret
 
-	.p2align 4
-L(CopyVecSizeUnaligned_32):
-	bsf	%edx, %edx
-	VMOVU	%YMM4, (%rdi)
-	VMOVU	%YMM5, VEC_SIZE(%rdi)
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
+	.p2align 4,, 4
+L(ret_vec_x4):
+	bsfl	%ecx, %ecx
+	VMOVU	((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VEC(0)
+	VMOVU	%VEC(0), ((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
+#  ifdef USE_AS_STPCPY
+	leaq	(VEC_SIZE * 4)(%rdi, %rcx, CHAR_SIZE), %rax
+#  endif
+	ret
+
+	.p2align 4,, 8
+	.p2align 6,, 10
+L(more_4x_vec):
+	VMOVA	(VEC_SIZE * 4)(%rsi), %VEC(4)
+	VMOVU	%VEC(3), (VEC_SIZE * 3)(%rdi)
+	VPTESTM	%VEC(4), %VEC(4), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jnz	L(ret_vec_x4)
+
+	VMOVU	%VEC(4), (VEC_SIZE * 4)(%rdi)
+
+	subq	%rsi, %rdi
+	subq	$-(VEC_SIZE * 5), %rsi
+	andq	$-(VEC_SIZE * 4), %rsi
+
+
+	VMOVA	(VEC_SIZE * 0 + 0)(%rsi), %VEC(0)
+	VMOVA	(VEC_SIZE * 1 + 0)(%rsi), %VEC(1)
+	VMOVA	(VEC_SIZE * 2 + 0)(%rsi), %VEC(2)
+	VMOVA	(VEC_SIZE * 3 + 0)(%rsi), %VEC(3)
+
+	VPMIN	%VEC(0), %VEC(1), %VEC(4)
+	VPMIN	%VEC(2), %VEC(3), %VEC(6)
+	VPMIN	%VEC(4), %VEC(6), %VEC(6)
+	VPTESTM	%VEC(6), %VEC(6), %k0
+	kmovd	%k0, %edx
+	addq	%rsi, %rdi
+	testl	%edx, %edx
+	jnz	L(loop_4x_done)
+
+	.p2align 4,, 11
+L(loop_4x_vec):
+
+	VMOVU	%VEC(0), (VEC_SIZE * 0 + 0)(%rdi)
+	VMOVU	%VEC(1), (VEC_SIZE * 1 + 0)(%rdi)
+	subq	$(VEC_SIZE * -4), %rsi
+	VMOVU	%VEC(2), (VEC_SIZE * 2 + 0)(%rdi)
+	VMOVU	%VEC(3), (VEC_SIZE * 3 + 0)(%rdi)
+
+
+	VMOVA	(VEC_SIZE * 0 + 0)(%rsi), %VEC(0)
+	VMOVA	(VEC_SIZE * 1 + 0)(%rsi), %VEC(1)
+	VMOVA	(VEC_SIZE * 2 + 0)(%rsi), %VEC(2)
+	VMOVA	(VEC_SIZE * 3 + 0)(%rsi), %VEC(3)
+
+	VPMIN	%VEC(0), %VEC(1), %VEC(4)
+	VPMIN	%VEC(2), %VEC(3), %VEC(6)
+	VPMIN	%VEC(4), %VEC(6), %VEC(6)
+	VPTESTM	%VEC(6), %VEC(6), %k0
+	kmovd	%k0, %edx
+	subq	$(VEC_SIZE * -4), %rdi
+	testl	%edx, %edx
+	jz	L(loop_4x_vec)
+
+L(loop_4x_done):
+	VPTESTM	%VEC(0), %VEC(0), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jnz	L(ret_vec_x0_end)
+	VMOVU	%ymm0, (VEC_SIZE * 0 + 0)(%rdi)
+
+	VPTESTM	%VEC(1), %VEC(1), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jnz	L(ret_vec_x1)
+	VMOVU	%ymm1, (VEC_SIZE * 1 + 0)(%rdi)
+
+	VPTESTM	%VEC(2), %VEC(2), %k0
+	kmovd	%k0, %ecx
+	testl	%ecx, %ecx
+	jnz	L(ret_vec_x2)
+	VMOVU	%ymm2, (VEC_SIZE * 2 + 0)(%rdi)
+	/* Place L(ret_vec_x4) here to save code size.  We get a
+	   meaningfuly benefit doing this for stpcpy.  */
+	bsfl	%edx, %edx
+	VMOVU	((VEC_SIZE * 3)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rdx, CHAR_SIZE), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 3 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rdx, CHAR_SIZE)
 # ifdef USE_AS_STPCPY
-	lea	(VEC_SIZE * 2)(%rdi, %rdx), %rax
+	leaq	(VEC_SIZE * 3 + 0)(%rdi, %rdx, CHAR_SIZE), %rax
 # endif
-	VMOVU	%YMM6, (VEC_SIZE * 2)(%rdi)
-	add	$((VEC_SIZE * 2) - 1), %r8
-	sub	%rdx, %r8
-	lea	((VEC_SIZE * 2) + 1)(%rdi, %rdx), %rdi
-	jmp	L(StrncpyFillTailWithZero)
-# else
-	add	$(VEC_SIZE * 2), %rsi
-	add	$(VEC_SIZE * 2), %rdi
-	jmp	L(CopyVecSizeExit)
-# endif
+L(return_end):
+	ret
 
-# ifdef USE_AS_STRNCPY
+	.p2align 4,, 1
+L(ret_vec_x0_end):
+	bsfl	%ecx, %ecx
+	incl	%ecx
+	VMOVU	(-(VEC_SIZE))(%rsi, %rcx, CHAR_SIZE), %VEC(0)
+	VMOVU	%VEC(0), (-(VEC_SIZE))(%rdi, %rcx, CHAR_SIZE)
+# ifdef USE_AS_STPCPY
+#  ifdef USE_AS_WCSCPY
+	leaq	(%rdi, %rcx, CHAR_SIZE), %rax
+#  else
+	addq	%rcx, %rdi
+#  endif
+# endif
+	ret
+
+	.p2align 4,, 4
+	.p2align 6,, 8
+L(page_cross):
+	movq	%rsi, %rdx
+	andq	$(VEC_SIZE * -1), %rdx
+
+	VPCMPEQ	(%rdx), %VEC(7), %k0
+	kmovd	%k0, %ecx
+# ifdef USE_AS_WCSCPY
+	andl	$(VEC_SIZE - 1), %edx
+	shrl	$2, %edx
+# endif
+	shrxl	%edx, %ecx, %ecx
+# if 1
+	/* Optimizing aggressively for space as this is very cold code.
+	   This saves 2x cache lines.  */
+	shll	$CHAR_SIZE, %ecx
+	jz	L(page_cross_continue)
+#  if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
+	movq	%rdi, %rax
+#  endif
+	bsfl	%ecx, %ecx
+	rep	movsb
+#  ifdef USE_AS_STPCPY
+	leaq	-CHAR_SIZE(%rdi), %rax
+#  endif
+
+#  if defined USE_AS_STPCPY || defined USE_AS_STRCAT
+	ret
+#  else
+	jmp	L(return_end)
+	/* 0 bytes until next cache line.  */
+#  endif
+
+
+# else
+	testl	%ecx, %ecx
+	jz	L(page_cross_continue)
 #  ifndef USE_AS_STRCAT
-	.p2align 4
-L(CopyVecSizeUnalignedVec6):
-	VMOVU	%YMM6, (%rdi, %rcx)
-	jmp	L(CopyVecSizeVecExit)
-
-	.p2align 4
-L(CopyVecSizeUnalignedVec5):
-	VMOVU	%YMM5, (%rdi, %rcx)
-	jmp	L(CopyVecSizeVecExit)
-
-	.p2align 4
-L(CopyVecSizeUnalignedVec4):
-	VMOVU	%YMM4, (%rdi, %rcx)
-	jmp	L(CopyVecSizeVecExit)
-
-	.p2align 4
-L(CopyVecSizeUnalignedVec3):
-	VMOVU	%YMM3, (%rdi, %rcx)
-	jmp	L(CopyVecSizeVecExit)
+	xorl	%edx, %edx
+#  endif
+	/* Dependency on rdi must already have been satisfied.  */
+	bsfl	%ecx, %edx
+#  ifdef USE_AS_STPCPY
+	leaq	(%rdi, %rdx), %rax
+#  elif !defined USE_AS_STRCAT
+	movq	%rdi, %rax
 #  endif
 
-/* Case2 */
 
-	.p2align 4
-L(CopyVecSizeCase2):
-	add	$VEC_SIZE, %r8
-	add	%rcx, %rdi
-	add	%rcx, %rsi
-	bsf	%edx, %edx
-	cmp	%r8d, %edx
-	jb	L(CopyVecSizeExit)
-	jmp	L(StrncpyExit)
+	testw	%cx, %cx
+	jz	L(page_cross_copy_16_31)
 
-	.p2align 4
-L(CopyTwoVecSizeCase2):
-	add	%rcx, %rsi
-	bsf	%edx, %edx
-	add	$VEC_SIZE, %edx
-	sub	%ecx, %edx
-	cmp	%r8d, %edx
-	jb	L(CopyVecSizeExit)
-	jmp	L(StrncpyExit)
+	testb	%cl, %cl
+	jz	L(page_cross_copy_8_15)
 
-L(CopyVecSizeTailCase2):
-	add	%rcx, %rsi
-	bsf	%edx, %edx
-	cmp	%r8d, %edx
-	jb	L(CopyVecSizeExit)
-	jmp	L(StrncpyExit)
+	andl	$0x7, %ecx
+	jz	L(page_cross_copy_4_7)
 
-L(CopyVecSizeTail1Case2):
-	bsf	%edx, %edx
-	cmp	%r8d, %edx
-	jb	L(CopyVecSizeExit)
-	jmp	L(StrncpyExit)
-
-/* Case2 or Case3,  Case3 */
-
-	.p2align 4
-L(CopyVecSizeCase2OrCase3):
-	test	%rdx, %rdx
-	jnz	L(CopyVecSizeCase2)
-L(CopyVecSizeCase3):
-	add	$VEC_SIZE, %r8
-	add	%rcx, %rdi
-	add	%rcx, %rsi
-	jmp	L(StrncpyExit)
-
-	.p2align 4
-L(CopyTwoVecSizeCase2OrCase3):
-	test	%rdx, %rdx
-	jnz	L(CopyTwoVecSizeCase2)
-	add	%rcx, %rsi
-	jmp	L(StrncpyExit)
-
-	.p2align 4
-L(CopyVecSizeTailCase2OrCase3):
-	test	%rdx, %rdx
-	jnz	L(CopyVecSizeTailCase2)
-	add	%rcx, %rsi
-	jmp	L(StrncpyExit)
-
-	.p2align 4
-L(CopyTwoVecSize1Case2OrCase3):
-	add	$VEC_SIZE, %rdi
-	add	$VEC_SIZE, %rsi
-	sub	$VEC_SIZE, %r8
-L(CopyVecSizeTail1Case2OrCase3):
-	test	%rdx, %rdx
-	jnz	L(CopyVecSizeTail1Case2)
-	jmp	L(StrncpyExit)
-# endif
-
-/*------------End labels regarding with copying 1-VEC_SIZE bytes--and 1-(VEC_SIZE*2) bytes----*/
-
-	.p2align 4
-L(Exit1):
-	movzwl	(%rsi), %edx
-	mov	%dx, (%rdi)
-# ifdef USE_AS_STPCPY
-	lea	1(%rdi), %rax
-# endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	$2, %r8
-	lea	2(%rdi), %rdi
-	jnz	L(StrncpyFillTailWithZero)
-# endif
-	ret
-
-	.p2align 4
-L(Exit2):
+	testl	%edx, %edx
+	jz	L(page_cross_set_null_term)
 	movzwl	(%rsi), %ecx
-	mov	%cx, (%rdi)
-	movb	$0, 2(%rdi)
-# ifdef USE_AS_STPCPY
-	lea	2(%rdi), %rax
-# endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	$3, %r8
-	lea	3(%rdi), %rdi
-	jnz	L(StrncpyFillTailWithZero)
-# endif
+	movw	%cx, (%rdi)
+L(page_cross_set_null_term):
+	movb	$0, (%END_REG)
 	ret
 
-	.p2align 4
-L(Exit3):
-	mov	(%rsi), %edx
-	mov	%edx, (%rdi)
-# ifdef USE_AS_STPCPY
-	lea	3(%rdi), %rax
-# endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	$4, %r8
-	lea	4(%rdi), %rdi
-	jnz	L(StrncpyFillTailWithZero)
-# endif
+
+	.p2align 4,, 4
+L(page_cross_copy_4_7):
+	movl	(%rsi), %ecx
+	movl	-3(%rsi, %rdx), %esi
+	movl	%ecx, (%rdi)
+	movl	%esi, -3(%END_REG)
+	ret
+	.p2align 4,, 4
+L(page_cross_copy_8_15):
+	movq	(%rsi), %rcx
+	movq	-7(%rsi, %rdx), %rsi
+	movq	%rcx, (%rdi)
+	movq	%rsi, -7(%END_REG)
 	ret
 
-	.p2align 4
-L(Exit4_7):
-	mov	(%rsi), %ecx
-	mov	%ecx, (%rdi)
-	mov	-3(%rsi, %rdx), %ecx
-	mov	%ecx, -3(%rdi, %rdx)
-# ifdef USE_AS_STPCPY
-	lea	(%rdi, %rdx), %rax
-# endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	%rdx, %r8
-	sub	$1, %r8
-	lea	1(%rdi, %rdx), %rdi
-	jnz	L(StrncpyFillTailWithZero)
-# endif
-	ret
 
-	.p2align 4
-L(Exit8_15):
-	mov	(%rsi), %rcx
-	mov	-7(%rsi, %rdx), %r9
-	mov	%rcx, (%rdi)
-	mov	%r9, -7(%rdi, %rdx)
-# ifdef USE_AS_STPCPY
-	lea	(%rdi, %rdx), %rax
-# endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	%rdx, %r8
-	sub	$1, %r8
-	lea	1(%rdi, %rdx), %rdi
-	jnz	L(StrncpyFillTailWithZero)
-# endif
-	ret
-
-	.p2align 4
-L(Exit16_31):
-	VMOVU	(%rsi), %XMM2
-	VMOVU	-15(%rsi, %rdx), %XMM3
-	VMOVU	%XMM2, (%rdi)
-	VMOVU	%XMM3, -15(%rdi, %rdx)
-# ifdef USE_AS_STPCPY
-	lea	(%rdi, %rdx), %rax
-# endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub %rdx, %r8
-	sub $1, %r8
-	lea 1(%rdi, %rdx), %rdi
-	jnz L(StrncpyFillTailWithZero)
-# endif
-	ret
-
-	.p2align 4
-L(Exit32_63):
-	VMOVU	(%rsi), %YMM2
-	VMOVU	-31(%rsi, %rdx), %YMM3
-	VMOVU	%YMM2, (%rdi)
-	VMOVU	%YMM3, -31(%rdi, %rdx)
-# ifdef USE_AS_STPCPY
-	lea	(%rdi, %rdx), %rax
-# endif
-# if defined USE_AS_STRNCPY && !defined USE_AS_STRCAT
-	sub	%rdx, %r8
-	sub	$1, %r8
-	lea	1(%rdi, %rdx), %rdi
-	jnz	L(StrncpyFillTailWithZero)
-# endif
-	ret
-
-# ifdef USE_AS_STRNCPY
-
-	.p2align 4
-L(StrncpyExit1):
-	movzbl	(%rsi), %edx
-	mov	%dl, (%rdi)
-#  ifdef USE_AS_STPCPY
-	lea	1(%rdi), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, 1(%rdi)
-#  endif
-	ret
-
-	.p2align 4
-L(StrncpyExit2):
-	movzwl	(%rsi), %edx
-	mov	%dx, (%rdi)
-#  ifdef USE_AS_STPCPY
-	lea	2(%rdi), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, 2(%rdi)
-#  endif
-	ret
-
-	.p2align 4
-L(StrncpyExit3_4):
-	movzwl	(%rsi), %ecx
-	movzwl	-2(%rsi, %r8), %edx
-	mov	%cx, (%rdi)
-	mov	%dx, -2(%rdi, %r8)
-#  ifdef USE_AS_STPCPY
-	lea	(%rdi, %r8), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, (%rdi, %r8)
-#  endif
-	ret
-
-	.p2align 4
-L(StrncpyExit5_8):
-	mov	(%rsi), %ecx
-	mov	-4(%rsi, %r8), %edx
-	mov	%ecx, (%rdi)
-	mov	%edx, -4(%rdi, %r8)
-#  ifdef USE_AS_STPCPY
-	lea	(%rdi, %r8), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, (%rdi, %r8)
-#  endif
-	ret
-
-	.p2align 4
-L(StrncpyExit9_16):
-	mov	(%rsi), %rcx
-	mov	-8(%rsi, %r8), %rdx
-	mov	%rcx, (%rdi)
-	mov	%rdx, -8(%rdi, %r8)
-#  ifdef USE_AS_STPCPY
-	lea	(%rdi, %r8), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, (%rdi, %r8)
-#  endif
-	ret
-
-	.p2align 4
-L(StrncpyExit17_32):
-	VMOVU	(%rsi), %XMM2
-	VMOVU	-16(%rsi, %r8), %XMM3
-	VMOVU	%XMM2, (%rdi)
-	VMOVU	%XMM3, -16(%rdi, %r8)
-#  ifdef USE_AS_STPCPY
-	lea	(%rdi, %r8), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, (%rdi, %r8)
-#  endif
-	ret
-
-	.p2align 4
-L(StrncpyExit33_64):
-	/*  0/32, 31/16 */
-	VMOVU	(%rsi), %YMM2
-	VMOVU	-VEC_SIZE(%rsi, %r8), %YMM3
-	VMOVU	%YMM2, (%rdi)
-	VMOVU	%YMM3, -VEC_SIZE(%rdi, %r8)
-#  ifdef USE_AS_STPCPY
-	lea	(%rdi, %r8), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, (%rdi, %r8)
-#  endif
-	ret
-
-	.p2align 4
-L(StrncpyExit65):
-	/* 0/32, 32/32, 64/1 */
-	VMOVU	(%rsi), %YMM2
-	VMOVU	32(%rsi), %YMM3
-	mov	64(%rsi), %cl
-	VMOVU	%YMM2, (%rdi)
-	VMOVU	%YMM3, 32(%rdi)
-	mov	%cl, 64(%rdi)
-#  ifdef USE_AS_STPCPY
-	lea	65(%rdi), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, 65(%rdi)
-#  endif
-	ret
-
-#  ifndef USE_AS_STRCAT
-
-	.p2align 4
-L(Fill1):
-	mov	%dl, (%rdi)
-	ret
-
-	.p2align 4
-L(Fill2):
-	mov	%dx, (%rdi)
-	ret
-
-	.p2align 4
-L(Fill3_4):
-	mov	%dx, (%rdi)
-	mov     %dx, -2(%rdi, %r8)
-	ret
-
-	.p2align 4
-L(Fill5_8):
-	mov	%edx, (%rdi)
-	mov     %edx, -4(%rdi, %r8)
-	ret
-
-	.p2align 4
-L(Fill9_16):
-	mov	%rdx, (%rdi)
-	mov	%rdx, -8(%rdi, %r8)
-	ret
-
-	.p2align 4
-L(Fill17_32):
-	VMOVU	%XMMZERO, (%rdi)
-	VMOVU	%XMMZERO, -16(%rdi, %r8)
-	ret
-
-	.p2align 4
-L(CopyVecSizeUnalignedVec2):
-	VMOVU	%YMM2, (%rdi, %rcx)
-
-	.p2align 4
-L(CopyVecSizeVecExit):
-	bsf	%edx, %edx
-	add	$(VEC_SIZE - 1), %r8
-	add	%rcx, %rdi
-#   ifdef USE_AS_STPCPY
-	lea	(%rdi, %rdx), %rax
-#   endif
-	sub	%rdx, %r8
-	lea	1(%rdi, %rdx), %rdi
-
-	.p2align 4
-L(StrncpyFillTailWithZero):
-	xor	%edx, %edx
-	sub	$VEC_SIZE, %r8
-	jbe	L(StrncpyFillExit)
-
-	VMOVU	%YMMZERO, (%rdi)
-	add	$VEC_SIZE, %rdi
-
-	mov	%rdi, %rsi
-	and	$(VEC_SIZE - 1), %esi
-	sub	%rsi, %rdi
-	add	%rsi, %r8
-	sub	$(VEC_SIZE * 4), %r8
-	jb	L(StrncpyFillLessFourVecSize)
-
-L(StrncpyFillLoopVmovdqa):
-	VMOVA	%YMMZERO, (%rdi)
-	VMOVA	%YMMZERO, VEC_SIZE(%rdi)
-	VMOVA	%YMMZERO, (VEC_SIZE * 2)(%rdi)
-	VMOVA	%YMMZERO, (VEC_SIZE * 3)(%rdi)
-	add	$(VEC_SIZE * 4), %rdi
-	sub	$(VEC_SIZE * 4), %r8
-	jae	L(StrncpyFillLoopVmovdqa)
-
-L(StrncpyFillLessFourVecSize):
-	add	$(VEC_SIZE * 2), %r8
-	jl	L(StrncpyFillLessTwoVecSize)
-	VMOVA	%YMMZERO, (%rdi)
-	VMOVA	%YMMZERO, VEC_SIZE(%rdi)
-	add	$(VEC_SIZE * 2), %rdi
-	sub	$VEC_SIZE, %r8
-	jl	L(StrncpyFillExit)
-	VMOVA	%YMMZERO, (%rdi)
-	add	$VEC_SIZE, %rdi
-	jmp	L(Fill)
-
-	.p2align 4
-L(StrncpyFillLessTwoVecSize):
-	add	$VEC_SIZE, %r8
-	jl	L(StrncpyFillExit)
-	VMOVA	%YMMZERO, (%rdi)
-	add	$VEC_SIZE, %rdi
-	jmp	L(Fill)
-
-	.p2align 4
-L(StrncpyFillExit):
-	add	$VEC_SIZE, %r8
-L(Fill):
-	cmp	$17, %r8d
-	jae	L(Fill17_32)
-	cmp	$9, %r8d
-	jae	L(Fill9_16)
-	cmp	$5, %r8d
-	jae	L(Fill5_8)
-	cmp	$3, %r8d
-	jae	L(Fill3_4)
-	cmp	$1, %r8d
-	ja	L(Fill2)
-	je	L(Fill1)
-	ret
-
-/* end of ifndef USE_AS_STRCAT */
-#  endif
-
-	.p2align 4
-L(UnalignedLeaveCase2OrCase3):
-	test	%rdx, %rdx
-	jnz	L(UnalignedFourVecSizeLeaveCase2)
-L(UnalignedFourVecSizeLeaveCase3):
-	lea	(VEC_SIZE * 4)(%r8), %rcx
-	and	$-VEC_SIZE, %rcx
-	add	$(VEC_SIZE * 3), %r8
-	jl	L(CopyVecSizeCase3)
-	VMOVU	%YMM4, (%rdi)
-	sub	$VEC_SIZE, %r8
-	jb	L(CopyVecSizeCase3)
-	VMOVU	%YMM5, VEC_SIZE(%rdi)
-	sub	$VEC_SIZE, %r8
-	jb	L(CopyVecSizeCase3)
-	VMOVU	%YMM6, (VEC_SIZE * 2)(%rdi)
-	sub	$VEC_SIZE, %r8
-	jb	L(CopyVecSizeCase3)
-	VMOVU	%YMM7, (VEC_SIZE * 3)(%rdi)
-#  ifdef USE_AS_STPCPY
-	lea	(VEC_SIZE * 4)(%rdi), %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, (VEC_SIZE * 4)(%rdi)
-#  endif
-	ret
-
-	.p2align 4
-L(UnalignedFourVecSizeLeaveCase2):
-	xor	%ecx, %ecx
-	vpcmpb	$0, %YMM4, %YMMZERO, %k1
-	kmovd	%k1, %edx
-	add	$(VEC_SIZE * 3), %r8
-	jle	L(CopyVecSizeCase2OrCase3)
-	test	%edx, %edx
-#  ifndef USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec4)
-#  else
-	jnz	L(CopyVecSize)
-#  endif
-	vpcmpb	$0, %YMM5, %YMMZERO, %k2
-	kmovd	%k2, %edx
-	VMOVU	%YMM4, (%rdi)
-	add	$VEC_SIZE, %rcx
-	sub	$VEC_SIZE, %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
-	test	%edx, %edx
-#  ifndef USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec5)
-#  else
-	jnz	L(CopyVecSize)
-#  endif
-
-	vpcmpb	$0, %YMM6, %YMMZERO, %k3
-	kmovd	%k3, %edx
-	VMOVU	%YMM5, VEC_SIZE(%rdi)
-	add	$VEC_SIZE, %rcx
-	sub	$VEC_SIZE, %r8
-	jbe	L(CopyVecSizeCase2OrCase3)
-	test	%edx, %edx
-#  ifndef USE_AS_STRCAT
-	jnz	L(CopyVecSizeUnalignedVec6)
-#  else
-	jnz	L(CopyVecSize)
-#  endif
-
-	vpcmpb	$0, %YMM7, %YMMZERO, %k4
-	kmovd	%k4, %edx
-	VMOVU	%YMM6, (VEC_SIZE * 2)(%rdi)
-	lea	VEC_SIZE(%rdi, %rcx), %rdi
-	lea	VEC_SIZE(%rsi, %rcx), %rsi
-	bsf	%edx, %edx
-	cmp	%r8d, %edx
-	jb	L(CopyVecSizeExit)
-L(StrncpyExit):
-	cmp	$65, %r8d
-	je	L(StrncpyExit65)
-	cmp	$33, %r8d
-	jae	L(StrncpyExit33_64)
-	cmp	$17, %r8d
-	jae	L(StrncpyExit17_32)
-	cmp	$9, %r8d
-	jae	L(StrncpyExit9_16)
-	cmp	$5, %r8d
-	jae	L(StrncpyExit5_8)
-	cmp	$3, %r8d
-	jae	L(StrncpyExit3_4)
-	cmp	$1, %r8d
-	ja	L(StrncpyExit2)
-	je	L(StrncpyExit1)
-#  ifdef USE_AS_STPCPY
-	mov	%rdi, %rax
-#  endif
-#  ifdef USE_AS_STRCAT
-	movb	$0, (%rdi)
-#  endif
-	ret
-
-	.p2align 4
-L(ExitZero):
-#  ifndef USE_AS_STRCAT
-	mov	%rdi, %rax
-#  endif
+	.p2align 4,, 3
+L(page_cross_copy_16_31):
+	VMOVU	(%rsi), %xmm0
+	VMOVU	-15(%rsi, %rdx), %xmm1
+	VMOVU	%xmm0, (%rdi)
+	VMOVU	%xmm1, -15(%END_REG)
 	ret
 
 # endif
 
-# ifndef USE_AS_STRCAT
-END (STRCPY)
-# else
-END (STRCAT)
-# endif
+
+
+END(STRCPY)
 #endif

@@ -9,24 +9,39 @@
 
 
 #define run(dst, src, n)                                                       \
-    CAST(uint8_t *,                                                            \
-         (wsize == 4                                                           \
-              ? CAST(uint8_t *,                                                \
-                     (with_len                                                 \
-                          ? func.run_wcsncpy(CAST(wchar_t *, dst),             \
-                                             CAST(wchar_t const *, src), (n))  \
-                          : func.run_wcscpy(CAST(wchar_t *, dst),              \
-                                            CAST(wchar_t const *, src))))      \
-              : CAST(uint8_t *,                                                \
-                     (with_len                                                 \
-                          ? func.run_strncpy(                                  \
-                                CAST(char *,                                   \
-                                     (init_f == &init_strncat ? s1 : dst)),    \
-                                CAST(char const *, src), (n))                  \
-                          : func.run_strcpy(                                   \
-                                CAST(char *,                                   \
-                                     (init_f == &init_strcat ? s1 : dst)),     \
-                                CAST(char const *, src))))))
+    CAST(                                                                      \
+        uint8_t *,                                                             \
+        (wsize == 4                                                            \
+             ? CAST(uint8_t *,                                                 \
+                    (with_len ? func.run_wcsncpy(                              \
+                                    CAST(wchar_t *,                            \
+                                         init_f == &init_wcsncat               \
+                                             ? strcat_expec_ret(dst, s1, 4)    \
+                                             : dst),                           \
+                                    CAST(wchar_t const *, src), ((n) >> 2))    \
+                              : func.run_wcscpy(                               \
+                                    CAST(wchar_t *,                            \
+                                         init_f == &init_wcscat                \
+                                             ? strcat_expec_ret(dst, s1, 4)    \
+                                             : dst),                           \
+                                    CAST(wchar_t const *, src))))              \
+             : CAST(                                                           \
+                   uint8_t *,                                                  \
+                   (with_len                                                   \
+                        ? func.run_strncpy(                                    \
+                              CAST(char *, (init_f == &init_strncat            \
+                                                ? strcat_expec_ret(dst, s1, 1) \
+                                                : dst)),                       \
+                              CAST(char const *, src), (n))                    \
+                        : func.run_strcpy(                                     \
+                              CAST(char *, (init_f == &init_strcat             \
+                                                ? strcat_expec_ret(dst, s1, 1) \
+                                                : dst)),                       \
+                              CAST(char const *, src))))))
+
+#define strcat_expec_ret(s1_, s1_start_, sz_)                                  \
+    ((s1_start_) + (((((s1_) - (s1_start_)) * 15) / 16) & (-CAST(uint64_t, sz_))))
+
 static int32_t
 check_strcat(const uint8_t * s1_start,
              const uint8_t * s1_end,
@@ -37,7 +52,7 @@ check_strcat(const uint8_t * s1_start,
              uint64_t        len) {
     (void)(n);
 
-    if (ret != s1_start) {
+    if (ret != strcat_expec_ret(s1, s1_start, 1)) {
         fprintf(stderr, "Bad Return (%p, %p, %p)\n", ret, s1, s1_start);
         return 4;
     }
@@ -59,6 +74,46 @@ check_strcat(const uint8_t * s1_start,
     }
 
     if (check_sentinel(s1 + len + 1, s1_end, END)) {
+        fprintf(stderr, "End Sentinel Error\n");
+        return 3;
+    }
+
+    return 0;
+}
+
+static int32_t
+check_wcscat(const uint8_t * s1_start,
+             const uint8_t * s1_end,
+             const uint8_t * s1,
+             const uint8_t * s2,
+             const uint8_t * ret,
+             uint64_t        n,
+             uint64_t        len) {
+    (void)(n);
+
+    if (ret != strcat_expec_ret(s1, s1_start, 4)) {
+        fprintf(stderr, "Bad Return (%p, %p, %p)\n", ret, s1, s1_start);
+        return 4;
+    }
+
+    if (check_sentinel(s1_start, s1, START)) {
+        fprintf(stderr, "Start Sentinel Error\n");
+        return 1;
+    }
+
+    if (check_region(s1, s2, len)) {
+        fprintf(stderr, "Region Error: %lu\n", len);
+        return 2;
+    }
+
+    uint32_t v = -1;
+    memcpy(&v, s1 + len, 4);
+    if (v != 0) {
+        fprintf(stderr, "No Term: %lu (%u) (%u)\n", len, s2[len] == '\0', v);
+        return 4;
+    }
+
+    if (check_sentinel(s1 + len + 4, s1_end, END)) {
         fprintf(stderr, "End Sentinel Error\n");
         return 3;
     }
@@ -107,6 +162,47 @@ check_strcpy(const uint8_t * s1_start,
 }
 
 static int32_t
+check_wcscpy(const uint8_t * s1_start,
+             const uint8_t * s1_end,
+             const uint8_t * s1,
+             const uint8_t * s2,
+             const uint8_t * ret,
+             uint64_t        n,
+             uint64_t        len) {
+    (void)(n);
+
+    if (ret != s1) {
+        fprintf(stderr, "Bad Return\n");
+        return 4;
+    }
+
+    if (check_sentinel(s1_start, s1, START)) {
+        fprintf(stderr, "Start Sentinel Error\n");
+        return 1;
+    }
+
+    if (check_region(s1, s2, len)) {
+        fprintf(stderr, "Region Error: %lu\n", len);
+        return 2;
+    }
+
+
+    uint32_t v = -1;
+    memcpy(&v, s1 + len, 4);
+    if (v != 0) {
+        fprintf(stderr, "No Term: %lu (%u) (%x)\n", len, s2[len] == '\0', v);
+        return 4;
+    }
+
+    if (check_sentinel(s1 + len + 4, s1_end, END)) {
+        fprintf(stderr, "End Sentinel Error\n");
+        return 3;
+    }
+
+    return 0;
+}
+
+static int32_t
 check_stpcpy(const uint8_t * s1_start,
              const uint8_t * s1_end,
              const uint8_t * s1,
@@ -147,6 +243,48 @@ check_stpcpy(const uint8_t * s1_start,
 
 
 static int32_t
+check_wcpcpy(const uint8_t * s1_start,
+             const uint8_t * s1_end,
+             const uint8_t * s1,
+             const uint8_t * s2,
+             const uint8_t * ret,
+             uint64_t        n,
+             uint64_t        len) {
+    (void)(n);
+
+    if (ret != s1 + len) {
+        fprintf(stderr, "Bad Return\n");
+        return 4;
+    }
+
+    if (check_sentinel(s1_start, s1, START)) {
+        fprintf(stderr, "Start Sentinel Error\n");
+        return 1;
+    }
+
+    if (check_region(s1, s2, len)) {
+        fprintf(stderr, "Region Error: %lu\n", len);
+        return 2;
+    }
+
+
+    uint32_t v = -1;
+    memcpy(&v, s1 + len, 4);
+    if (v != 0) {
+        fprintf(stderr, "No Term: %lu (%u) (%x)\n", len, s2[len] == '\0', v);
+        return 4;
+    }
+
+    if (check_sentinel(s1 + len + 4, s1_end, END)) {
+        fprintf(stderr, "End Sentinel Error\n");
+        return 3;
+    }
+
+    return 0;
+}
+
+
+static int32_t
 check_stpncpy(const uint8_t * s1_start,
               const uint8_t * s1_end,
               const uint8_t * s1,
@@ -161,7 +299,7 @@ check_stpncpy(const uint8_t * s1_start,
     }
 
 
-    uint64_t end_region = MIN(len, n);
+   uint64_t end_region = MIN(len, n);
     if (check_sentinel(s1_start, s1, START)) {
         fprintf(stderr, "Start Sentinel Error\n");
         return 1;
@@ -345,7 +483,7 @@ check_strncat(const uint8_t * s1_start,
               uint64_t        len) {
 
 
-    if (ret != s1_start) {
+    if (ret != strcat_expec_ret(s1, s1_start, 1)) {
         fprintf(stderr, "Bad Return\n");
         return 4;
     }
@@ -384,8 +522,59 @@ check_strncat(const uint8_t * s1_start,
     return 0;
 }
 
-static void
+static int32_t
+check_wcsncat(const uint8_t * s1_start,
+              const uint8_t * s1_end,
+              const uint8_t * s1,
+              const uint8_t * s2,
+              const uint8_t * ret,
+              uint64_t        n,
+              uint64_t        len) {
 
+    if (ret != strcat_expec_ret(s1, s1_start, 4)) {
+        fprintf(stderr, "Bad Return\n");
+        return 4;
+    }
+
+    uint64_t end = MIN(len, n);
+    if (check_sentinel(s1_start, s1, START)) {
+        fprintf(stderr, "Start Sentinel Error\n");
+        return 1;
+    }
+
+    if (len < n) {
+        uint32_t v = -1;
+        memcpy(&v, s1 + len, 4);
+        if (v != 0) {
+            fprintf(stderr, "No Term: %lu (%u, %u)\n", len, s1[len] == '\0',
+                    s2[len] == '\0');
+            return 4;
+        }
+    }
+    else if (n) {
+        uint32_t v = -1;
+        memcpy(&v, s1 + n - 4, 4);
+        if (v == 0) {
+            fprintf(stderr, "Has Term: %lu (%u, %u)\n", len, s1[len] == '\0',
+                    s2[len] == '\0');
+            return 4;
+        }
+    }
+
+    if (check_region(s1, s2, end)) {
+        fprintf(stderr, "Region Error: %lu\n", len);
+        return 1;
+    }
+
+    if (check_sentinel(s1 + end + 4, s1_end, END)) {
+        fprintf(stderr, "End Sentinel Error\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+static void
 init_strcpy(uint8_t * s1_start,
             uint8_t * s1_end,
             uint8_t * s1,
@@ -395,6 +584,19 @@ init_strcpy(uint8_t * s1_start,
     memset_c(s1, 0xff, len);
     init_cpy_sentinels(s1_start, s1_end, s1, len + 1);
 }
+
+
+static void
+init_wcscpy(uint8_t * s1_start,
+            uint8_t * s1_end,
+            uint8_t * s1,
+            uint64_t  len,
+            uint64_t  n) {
+    (void)(n);
+    memset_c(s1, 0xff, len);
+    init_cpy_sentinels(s1_start, s1_end, s1, len + 4);
+}
+
 
 static void
 init_strncpy(uint8_t * s1_start,
@@ -407,6 +609,7 @@ init_strncpy(uint8_t * s1_start,
     init_cpy_sentinels(s1_start, s1_end, s1, n);
 }
 
+
 static void
 init_stpcpy(uint8_t * s1_start,
             uint8_t * s1_end,
@@ -416,6 +619,17 @@ init_stpcpy(uint8_t * s1_start,
     (void)(n);
     memset_c(s1, 0xff, len);
     init_cpy_sentinels(s1_start, s1_end, s1, len + 1);
+}
+
+static void
+init_wcpcpy(uint8_t * s1_start,
+            uint8_t * s1_end,
+            uint8_t * s1,
+            uint64_t  len,
+            uint64_t  n) {
+    (void)(n);
+    memset_c(s1, 0xff, len);
+    init_cpy_sentinels(s1_start, s1_end, s1, len + 4);
 }
 
 static void
@@ -431,6 +645,18 @@ init_strcat(uint8_t * s1_start,
 }
 
 static void
+init_wcscat(uint8_t * s1_start,
+            uint8_t * s1_end,
+            uint8_t * s1,
+            uint64_t  len,
+            uint64_t  n) {
+    (void)(n);
+    memset_c(s1_start, 0xff, (s1 - s1_start) + len);
+    init_cpy_sentinels(s1_start, s1_end, s1, len + 4);
+    memset(s1, 0, 4);
+}
+
+static void
 init_strncat(uint8_t * s1_start,
              uint8_t * s1_end,
              uint8_t * s1,
@@ -443,6 +669,20 @@ init_strncat(uint8_t * s1_start,
     *s1 = '\0';
 }
 
+static void
+init_wcsncat(uint8_t * s1_start,
+             uint8_t * s1_end,
+             uint8_t * s1,
+             uint64_t  len,
+             uint64_t  n) {
+    uint64_t end = MIN(len, n);
+    memset_c(s1_start, 0xff, (s1 - s1_start) + end);
+    init_cpy_sentinels(s1_start, s1_end, s1, end + 4);
+
+    memset(s1, 0, 4);
+}
+
+
 typedef FUNC_T(init_strcpy) init_func_t;
 typedef FUNC_T(check_strcpy) check_func_t;
 
@@ -450,9 +690,9 @@ typedef FUNC_T(check_strcpy) check_func_t;
     "al1=%lu, al2=%lu, i=%lu, j=%lu, k=%lu, n=%lu\n",                          \
         ((uint64_t)test1) % 4096, ((uint64_t)test2) % 4096, i, j, k, n
 #define INIT_I 0
-#define INIT_J 33
+#define INIT_J 0
 #define INIT_K 0
-#define INIT_N 65
+#define INIT_N 0
 
 //#define VPRINT(...) fprintf(stderr, __VA_ARGS__)
 #ifndef VPRINT
@@ -495,8 +735,8 @@ test_strcpy_kernel(uint64_t     test_size,
         uint64_t test_max = test_size - al_offset;
         for (j = INIT_J; j < test_max; j += wsize) {
             for (k = INIT_K; k < NPAIRS; ++k) {
-                test1 = s1 + al_pairs[S1_IDX(k)];
-                test2 = s2 + al_pairs[S2_IDX(k)];
+                test1 = s1 + (al_pairs[S1_IDX(k)] & (-wsize));
+                test2 = s2 + (al_pairs[S1_IDX(k)] & (-wsize));
                 VPRINT("%lu:%lu:%lu\n", i, j, k);
                 PRINTFFL;
                 init_f(s1, s1 + test_size, test1, j, 0);
@@ -582,8 +822,8 @@ test_strncpy_kernel(uint64_t     test_size,
                  n = next_length(n, test_size, wsize_shift)) {
                 for (k = INIT_K; k < NPAIRS; ++k) {
                     VPRINT("%lu:%lu:%lu:%lu\n", i, j, n, k);
-                    test1 = s1 + al_pairs[S1_IDX(k)];
-                    test2 = s2 + al_pairs[S2_IDX(k)];
+                    test1 = s1 + (al_pairs[S1_IDX(k)] & (-wsize));
+                    test2 = s2 + (al_pairs[S1_IDX(k)] & (-wsize));
 
                     PRINTFFL;
                     init_f(s1, s1 + test_size, test1, j, n);
@@ -597,13 +837,25 @@ test_strncpy_kernel(uint64_t     test_size,
                     test_assert(
                         check_f(s1, s1 + test_size, test1, test2, r, n, j) == 0,
                         FAILURE_MSG);
-                    if (init_f == &init_strncat) {
-                        init_f(s1, s1 + test_size, test1, j, ULONG_MAX);
 
-                        r = run(test1, test2, ULONG_MAX);
-                        test_assert(check_f(s1, s1 + test_size, test1, test2, r,
-                                            ULONG_MAX, j) == 0,
-                                    FAILURE_MSG);
+
+                    if (init_f == &init_strncat || init_f == &init_wcsncat) {
+                        uint64_t of_len = ULONG_MAX;
+                        for (; of_len >= (ULONG_MAX >> 2); of_len >>= 1) {
+                            init_f(s1, s1 + test_size, test1, j, of_len);
+
+                            r = run(test1, test2, of_len);
+                            test_assert(check_f(s1, s1 + test_size, test1,
+                                                test2, r, of_len, j) == 0,
+                                        FAILURE_MSG);
+
+                            init_f(s1, s1 + test_size, test1, j, of_len + 1);
+
+                            r = run(test1, test2, of_len + 1);
+                            test_assert(check_f(s1, s1 + test_size, test1,
+                                                test2, r, of_len + 1, j) == 0,
+                                        FAILURE_MSG);
+                        }
                     }
 
                     PRINTFFL;
@@ -686,43 +938,53 @@ test_strlcat(void const * test_f) {
 }
 
 
-
 int32_t
 test_wcscpy(void const * test_f) {
-    (void)(test_f);
-    (void)(test_f);
+    test_assert(
+        test_strcpy_kernel(4096, test_f, &check_wcscpy, &init_wcscpy, 4) == 0);
+    test_assert(
+        test_strcpy_kernel(8192, test_f, &check_wcscpy, &init_wcscpy, 4) == 0);
     return 0;
 }
 int32_t
 test_wcscat(void const * test_f) {
-    (void)(test_f);
-    (void)(test_f);
+    test_assert(
+        test_strcpy_kernel(4096, test_f, &check_wcscat, &init_wcscat, 4) == 0);
+    test_assert(
+        test_strcpy_kernel(8192, test_f, &check_wcscat, &init_wcscat, 4) == 0);
     return 0;
 }
 int32_t
 test_wcpcpy(void const * test_f) {
-
-    (void)(test_f);
-    (void)(test_f);
+    test_assert(
+        test_strcpy_kernel(4096, test_f, &check_wcpcpy, &init_wcpcpy, 4) == 0);
+    test_assert(
+        test_strcpy_kernel(8192, test_f, &check_wcpcpy, &init_wcpcpy, 4) == 0);
     return 0;
 }
 
 int32_t
 test_wcsncpy(void const * test_f) {
-    (void)(test_f);
-    (void)(test_f);
+    test_assert(test_strncpy_kernel(4096, test_f, &check_strncpy, &init_strncpy,
+                                    4) == 0);
+    test_assert(test_strncpy_kernel(8192, test_f, &check_strncpy, &init_strncpy,
+                                    4) == 0);
     return 0;
 }
 int32_t
 test_wcsncat(void const * test_f) {
-    (void)(test_f);
-    (void)(test_f);
+    test_assert(test_strncpy_kernel(4096, test_f, &check_wcsncat, &init_wcsncat,
+                                    4) == 0);
+    test_assert(test_strncpy_kernel(8192, test_f, &check_wcsncat, &init_wcsncat,
+                                    4) == 0);
     return 0;
 }
 int32_t
 test_wcpncpy(void const * test_f) {
-    (void)(test_f);
-    (void)(test_f);
+    test_assert(test_strncpy_kernel(4096, test_f, &check_stpncpy, &init_strncpy,
+                                    4) == 0);
+    test_assert(test_strncpy_kernel(8192, test_f, &check_stpncpy, &init_strncpy,
+                                    4) == 0);
     return 0;
 }
 int32_t

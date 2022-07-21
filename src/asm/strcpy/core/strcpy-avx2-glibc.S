@@ -50,6 +50,18 @@
 
 	.section SECTION(.text),"ax",@progbits
 ENTRY (STRCPY)
+# ifdef USE_AS_WCSCPY
+#  if defined USE_AS_STPCPY && defined USE_AS_STRNCPY
+	jmp	wcpncpy
+#  elif defined USE_AS_STRNCPY
+	jmp	wcsncpy
+#  elif defined USE_AS_STPCPY
+	jmp	wcpcpy
+#  else
+	jmp	wcscpy
+#  endif
+# endif
+
 #  ifdef USE_AS_STRNCPY
 	mov	%RDX_LP, %R8_LP
 	test	%R8_LP, %R8_LP
