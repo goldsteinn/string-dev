@@ -213,7 +213,7 @@ check_stpcpy(const uint8_t * s1_start,
     (void)(n);
 
     if (ret != s1 + len) {
-        fprintf(stderr, "Bad Return\n");
+        fprintf(stderr, "Bad Return (%p != %p)\n", ret, s1 + len);
         return 4;
     }
 
@@ -690,7 +690,7 @@ typedef FUNC_T(check_strcpy) check_func_t;
     "al1=%lu, al2=%lu, i=%lu, j=%lu, k=%lu, n=%lu\n",                          \
         ((uint64_t)test1) % 4096, ((uint64_t)test2) % 4096, i, j, k, n
 #define INIT_I 0
-#define INIT_J 0
+#define INIT_J 8
 #define INIT_K 0
 #define INIT_N 0
 

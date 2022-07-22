@@ -27,12 +27,14 @@
 
 # ifdef USE_AS_WCSCPY
 #  define VPMIN	vpminud
-#  define VPTESTM	vptestmd
+#  define VPTESTN	vptestnmd
+#  define VPTEST	vptestmd
 #  define VPCMPEQ	vpcmpeqd
 #  define CHAR_SIZE	4
 # else
 #  define VPMIN	vpminub
-#  define VPTESTM	vptestmb
+#  define VPTESTN	vptestnmb
+#  define VPTEST	vptestmb
 #  define VPCMPEQ	vpcmpeqb
 #  define CHAR_SIZE	1
 # endif
@@ -52,7 +54,7 @@
 	// #  define USE_AS_STRCAT
 # endif
 # ifdef USE_AS_STRCAT
-#  define PAGE_ALIGN_REG	ecx
+#  define PAGE_ALIGN_REG	edx
 # else
 #  define PAGE_ALIGN_REG	eax
 # endif
@@ -94,20 +96,19 @@ ENTRY(STRCPY)
 	testl	%ecx, %ecx
 	jnz	L(bsf_and_done_v1)
 
-	orq	$(VEC_SIZE * 2 - 1), %rdi
+    andq    $-(VEC_SIZE * 2), %rdi
 	.p2align 4,, 8
 L(loop_2x_vec):
-	VMOVA	(1)(%rdi), %VEC(0)
-	VPMIN	(VEC_SIZE + 1)(%rdi), %VEC(0), %VEC(1)
-	VPTESTM	%VEC(1), %VEC(1), %k0
+	VMOVA	(VEC_SIZE * 2)(%rdi), %VEC(0)
+	VPMIN	(VEC_SIZE * 3)(%rdi), %VEC(0), %VEC(1)
+	VPTESTN	%VEC(1), %VEC(1), %k0
 	kmovd	%k0, %edx
 	subq	$(VEC_SIZE * -2), %rdi
 	testl	%edx, %edx
 	jz	L(loop_2x_vec)
 
-	addq	$(VEC_SIZE * -2 + 1), %rdi
 
-	VPTESTM	%VEC(0), %VEC(0), %k0
+	VPTESTN	%VEC(0), %VEC(0), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(bsf_and_done_v0)
@@ -135,43 +136,68 @@ L(page_cross_continue):
 	movq	%rdi, %rax
 # endif
 	VMOVU	(%rsi), %VEC(0)
-	VPTESTM	%VEC(0), %VEC(0), %k0
+
+# if 1
+	VPTEST	%VEC(0), %VEC(0), %k0
+	kmovd	%k0, %ecx
+#  ifdef USE_AS_WCSCPY
+	subl	$0xff, %ecx
+#  else
+	incl	%ecx
+#  endif
+	jz	L(more_1x_vec)
+	kmovd	%ecx, %k1
+	kxord	%k0, %k1, %k1
+#  ifdef USE_AS_WCSCPY
+	vmovdqu32 %VEC(0), (%rdi){%k1}
+#  else
+	vmovdqu8 %VEC(0), (%rdi){%k1}
+#  endif
+
+#  ifdef USE_AS_STPCPY
+	bsfl	%ecx, %ecx
+	leaq	(%rdi, %rcx, CHAR_SIZE), %rax
+#  endif
+	ret
+
+# else
+	VPTESTN	%VEC(0), %VEC(0), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jz	L(more_1x_vec)
 
 	xorl	%edx, %edx
 	bsfl	%ecx, %edx
-# ifdef USE_AS_STPCPY
+#  ifdef USE_AS_STPCPY
 	leaq	(%rdi, %rdx, CHAR_SIZE), %rax
-# endif
+#  endif
 
 
-# ifdef USE_AS_WCSCPY
+#  ifdef USE_AS_WCSCPY
 	testb	$0xf, %cl
-# else
+#  else
 	testw	%cx, %cx
-# endif
+#  endif
 	jz	L(copy_16_31)
 
-# ifdef USE_AS_WCSCPY
+#  ifdef USE_AS_WCSCPY
 	testb	$0x3, %cl
-# else
+#  else
 	testb	%cl, %cl
-# endif
+#  endif
 	jz	L(copy_8_15)
-# ifdef USE_AS_WCSCPY
+#  ifdef USE_AS_WCSCPY
 	vmovd	%VEC_xmm(0), (%rdi)
 	movl	$0, (%END_REG)
 	ret
-# else
+#  else
 	andl	$0x7, %ecx
 	jz	L(copy_4_7)
 
-	vmovd	%VEC_xmm(0), %ecx
+
 	testl	%edx, %edx
 	jz	L(set_null_term)
-	movw	%cx, (%rdi)
+	vmovw	%VEC_xmm(0), (%rdi)
 
 	/* This only applies for stpcpy where we save a few bytes in
 	   L(copy_...) because END_REG doesn't need an index.  */
@@ -179,33 +205,38 @@ L(page_cross_continue):
 L(set_null_term):
 	movb	$0, (%END_REG)
 	ret
+#  endif
 
-	.p2align 4,, 12
-L(copy_4_7):
-	movl	-3(%rsi, %rdx), %ecx
-	vmovd	%VEC_xmm(0), (%rdi)
-	movl	%ecx, -3(%END_REG)
-	ret
-# endif
 
-	.p2align 4,, 10
+	.p2align 4,, 6
 L(copy_16_31):
 	/* Use xmm1 explicitly here as it won't induce a `vzeroupper`.
 	 */
-	vmovdqu	-(16 - CHAR_SIZE)(%rsi, %rdx), %xmm1
+	vmovdqu	-(16 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %xmm1
 	VMOVU	%VEC_xmm(0), (%rdi)
 	vmovdqu	%xmm1, -(16 - CHAR_SIZE)(%END_REG)
 	ret
-	.p2align 4,, 10
+
+#  ifndef USE_AS_WCSCPY
+	.p2align 4,, 8
+L(copy_4_7):
+	movl	-(4 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %ecx
+	vmovd	%VEC_xmm(0), (%rdi)
+	movl	%ecx, -(4 - CHAR_SIZE)(%END_REG)
+	ret
+#  endif
+
+	.p2align 4,, 8
 L(copy_8_15):
-# ifdef USE_AS_WCSCPY
-	movl	-(8 - CHAR_SIZE)(%rsi, %rdx), %ecx
-# else
-	movq	-(8 - CHAR_SIZE)(%rsi, %rdx), %rcx
-# endif
+#  ifdef USE_AS_WCSCPY
+	movl	-(8 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %ecx
+#  else
+	movq	-(8 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %rcx
+#  endif
 	vmovq	%VEC_xmm(0), (%rdi)
 	movq	%rcx, -(8 - CHAR_SIZE)(%END_REG)
 	ret
+# endif
 
 	.p2align 4,, 8
 	.p2align 6,, 14
@@ -220,7 +251,7 @@ L(more_1x_vec):
 # if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
 	VMOVU	%VEC(0), (%rax)
 # endif
-	VPTESTM	%VEC(1), %VEC(1), %k0
+	VPTESTN	%VEC(1), %VEC(1), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jz	L(more_2x_vec)
@@ -240,7 +271,7 @@ L(more_2x_vec):
 	VMOVA	(VEC_SIZE * 2)(%rsi), %VEC(2)
 	VMOVU	%VEC(1), VEC_SIZE(%rdi)
 
-	VPTESTM	%VEC(2), %VEC(2), %k0
+	VPTESTN	%VEC(2), %VEC(2), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x2)
@@ -248,7 +279,7 @@ L(more_2x_vec):
 	VMOVA	(VEC_SIZE * 3)(%rsi), %VEC(3)
 	VMOVU	%VEC(2), (VEC_SIZE * 2)(%rdi)
 
-	VPTESTM	%VEC(3), %VEC(3), %k0
+	VPTESTN	%VEC(3), %VEC(3), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jz	L(more_4x_vec)
@@ -277,9 +308,9 @@ L(ret_vec_x4):
 	bsfl	%ecx, %ecx
 	VMOVU	((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VEC(0)
 	VMOVU	%VEC(0), ((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
-#  ifdef USE_AS_STPCPY
+# ifdef USE_AS_STPCPY
 	leaq	(VEC_SIZE * 4)(%rdi, %rcx, CHAR_SIZE), %rax
-#  endif
+# endif
 	ret
 
 	.p2align 4,, 8
@@ -287,7 +318,7 @@ L(ret_vec_x4):
 L(more_4x_vec):
 	VMOVA	(VEC_SIZE * 4)(%rsi), %VEC(4)
 	VMOVU	%VEC(3), (VEC_SIZE * 3)(%rdi)
-	VPTESTM	%VEC(4), %VEC(4), %k0
+	VPTESTN	%VEC(4), %VEC(4), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x4)
@@ -307,7 +338,7 @@ L(more_4x_vec):
 	VPMIN	%VEC(0), %VEC(1), %VEC(4)
 	VPMIN	%VEC(2), %VEC(3), %VEC(6)
 	VPMIN	%VEC(4), %VEC(6), %VEC(6)
-	VPTESTM	%VEC(6), %VEC(6), %k0
+	VPTESTN	%VEC(6), %VEC(6), %k0
 	kmovd	%k0, %edx
 	addq	%rsi, %rdi
 	testl	%edx, %edx
@@ -331,35 +362,35 @@ L(loop_4x_vec):
 	VPMIN	%VEC(0), %VEC(1), %VEC(4)
 	VPMIN	%VEC(2), %VEC(3), %VEC(6)
 	VPMIN	%VEC(4), %VEC(6), %VEC(6)
-	VPTESTM	%VEC(6), %VEC(6), %k0
+	VPTESTN	%VEC(6), %VEC(6), %k0
 	kmovd	%k0, %edx
 	subq	$(VEC_SIZE * -4), %rdi
 	testl	%edx, %edx
 	jz	L(loop_4x_vec)
 
 L(loop_4x_done):
-	VPTESTM	%VEC(0), %VEC(0), %k0
+	VPTESTN	%VEC(0), %VEC(0), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x0_end)
-	VMOVU	%ymm0, (VEC_SIZE * 0 + 0)(%rdi)
+	VMOVU	%VEC(0), (VEC_SIZE * 0 + 0)(%rdi)
 
-	VPTESTM	%VEC(1), %VEC(1), %k0
+	VPTESTN	%VEC(1), %VEC(1), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x1)
-	VMOVU	%ymm1, (VEC_SIZE * 1 + 0)(%rdi)
+	VMOVU	%VEC(1), (VEC_SIZE * 1 + 0)(%rdi)
 
-	VPTESTM	%VEC(2), %VEC(2), %k0
+	VPTESTN	%VEC(2), %VEC(2), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x2)
-	VMOVU	%ymm2, (VEC_SIZE * 2 + 0)(%rdi)
+	VMOVU	%VEC(2), (VEC_SIZE * 2 + 0)(%rdi)
 	/* Place L(ret_vec_x4) here to save code size.  We get a
 	   meaningfuly benefit doing this for stpcpy.  */
 	bsfl	%edx, %edx
-	VMOVU	((VEC_SIZE * 3)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rdx, CHAR_SIZE), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 3 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rdx, CHAR_SIZE)
+	VMOVU	((VEC_SIZE * 3)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rdx, CHAR_SIZE), %VEC(0)
+	VMOVU	%VEC(0), ((VEC_SIZE * 3 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rdx, CHAR_SIZE)
 # ifdef USE_AS_STPCPY
 	leaq	(VEC_SIZE * 3 + 0)(%rdi, %rdx, CHAR_SIZE), %rax
 # endif
@@ -369,41 +400,43 @@ L(return_end):
 	.p2align 4,, 1
 L(ret_vec_x0_end):
 	bsfl	%ecx, %ecx
+# ifdef USE_AS_STPCPY
+	leaq	(%rdi, %rcx, CHAR_SIZE), %rax
+# endif
 	incl	%ecx
 	VMOVU	(-(VEC_SIZE))(%rsi, %rcx, CHAR_SIZE), %VEC(0)
 	VMOVU	%VEC(0), (-(VEC_SIZE))(%rdi, %rcx, CHAR_SIZE)
-# ifdef USE_AS_STPCPY
-#  ifdef USE_AS_WCSCPY
-	leaq	(%rdi, %rcx, CHAR_SIZE), %rax
-#  else
-	addq	%rcx, %rdi
-#  endif
-# endif
+
 	ret
 
 	.p2align 4,, 4
 	.p2align 6,, 8
 L(page_cross):
-	movq	%rsi, %rdx
-	andq	$(VEC_SIZE * -1), %rdx
+	movq	%rsi, %rcx
+	andq	$(VEC_SIZE * -1), %rcx
 
-	VPCMPEQ	(%rdx), %VEC(7), %k0
+	VPCMPEQ	(%rcx), %VEC(7), %k0
 	kmovd	%k0, %ecx
 # ifdef USE_AS_WCSCPY
-	andl	$(VEC_SIZE - 1), %edx
-	shrl	$2, %edx
+	andl	$(VEC_SIZE - 1), %PAGE_ALIGN_REG
+	shrl	$2, %PAGE_ALIGN_REG
 # endif
-	shrxl	%edx, %ecx, %ecx
+	shrxl	%PAGE_ALIGN_REG, %ecx, %ecx
 # if 1
 	/* Optimizing aggressively for space as this is very cold code.
 	   This saves 2x cache lines.  */
-	shll	$CHAR_SIZE, %ecx
+	shll	%ecx
 	jz	L(page_cross_continue)
 #  if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
 	movq	%rdi, %rax
 #  endif
 	bsfl	%ecx, %ecx
+#  ifdef USE_AS_WCSCPY
+	rep	movsd
+#  else
 	rep	movsb
+#  endif
+
 #  ifdef USE_AS_STPCPY
 	leaq	-CHAR_SIZE(%rdi), %rax
 #  endif
@@ -452,25 +485,25 @@ L(page_cross_set_null_term):
 	.p2align 4,, 4
 L(page_cross_copy_4_7):
 	movl	(%rsi), %ecx
-	movl	-3(%rsi, %rdx), %esi
+	movl	-(4 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %esi
 	movl	%ecx, (%rdi)
-	movl	%esi, -3(%END_REG)
+	movl	%esi, -(4 - CHAR_SIZE)(%END_REG)
 	ret
 	.p2align 4,, 4
 L(page_cross_copy_8_15):
 	movq	(%rsi), %rcx
-	movq	-7(%rsi, %rdx), %rsi
+	movq	-(8 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %rsi
 	movq	%rcx, (%rdi)
-	movq	%rsi, -7(%END_REG)
+	movq	%rsi, -(8 - CHAR_SIZE)(%END_REG)
 	ret
 
 
 	.p2align 4,, 3
 L(page_cross_copy_16_31):
 	VMOVU	(%rsi), %xmm0
-	VMOVU	-15(%rsi, %rdx), %xmm1
+	VMOVU	-(16 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %xmm1
 	VMOVU	%xmm0, (%rdi)
-	VMOVU	%xmm1, -15(%END_REG)
+	VMOVU	%xmm1, -(16 - CHAR_SIZE)%END_REG)
 	ret
 
 # endif

@@ -153,9 +153,9 @@ L(page_cross_continue):
 	andl	$0x7, %ecx
 	jz	L(copy_4_7)
 
-	vmovd	%xmm0, %ecx
 	testl	%edx, %edx
 	jz	L(set_null_term)
+    vmovd	%xmm0, %ecx
 	movw	%cx, (%rdi)
 
 	/* This only applies for stpcpy where we save a few bytes in
