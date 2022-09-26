@@ -17,42 +17,42 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include "../../libc-asm-common.h"
-#if IS_IN (libc)
+
+#if ISA_SHOULD_BUILD (4)
 
 # ifndef STRLEN
-#  define STRLEN				__strlen_evex
+#  define STRLEN	__strlen_evex
 # endif
 
-# define VMOVA				vmovdqa64
+# define VMOVA		vmovdqa64
 
 # ifdef USE_AS_WCSLEN
-#  define VPCMP				vpcmpd
-#  define VPMINU				vpminud
-#  define SHIFT_REG			ecx
-#  define CHAR_SIZE			4
+#  define VPCMP		vpcmpd
+#  define VPMINU	vpminud
+#  define SHIFT_REG ecx
+#  define CHAR_SIZE	4
 # else
-#  define VPCMP				vpcmpb
-#  define VPMINU				vpminub
-#  define SHIFT_REG			edx
-#  define CHAR_SIZE			1
+#  define VPCMP		vpcmpb
+#  define VPMINU	vpminub
+#  define SHIFT_REG edx
+#  define CHAR_SIZE	1
 # endif
 
-# define XMMZERO				xmm16
-# define YMMZERO				ymm16
-# define YMM1				ymm17
-# define YMM2				ymm18
-# define YMM3				ymm19
-# define YMM4				ymm20
-# define YMM5				ymm21
-# define YMM6				ymm22
+# define XMMZERO	xmm16
+# define YMMZERO	ymm16
+# define YMM1		ymm17
+# define YMM2		ymm18
+# define YMM3		ymm19
+# define YMM4		ymm20
+# define YMM5		ymm21
+# define YMM6		ymm22
 
-# define VEC_SIZE			32
-# define PAGE_SIZE			4096
-# define CHAR_PER_VEC			(VEC_SIZE / CHAR_SIZE)
+# define VEC_SIZE 32
+# define PAGE_SIZE 4096
+# define CHAR_PER_VEC (VEC_SIZE / CHAR_SIZE)
 
-	.section .text.evex, "ax", @progbits
-ENTRY(STRLEN)
-
+	.section .text.evex,"ax",@progbits
+ENTRY (STRLEN)
 # ifdef USE_AS_STRNLEN
 	/* Check zero length.  */
 	test	%RSI_LP, %RSI_LP
@@ -65,19 +65,16 @@ ENTRY(STRLEN)
 # endif
 	movl	%edi, %eax
 	vpxorq	%XMMZERO, %XMMZERO, %XMMZERO
-
-	/* Clear high bits from edi. Only keeping bits relevant to page cross
-	   check.  */
+	/* Clear high bits from edi. Only keeping bits relevant to page
+	   cross check.  */
 	andl	$(PAGE_SIZE - 1), %eax
 	/* Check if we may cross page boundary with one vector load.  */
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
 	ja	L(cross_page_boundary)
 
-	/* Check the first VEC_SIZE bytes.  Each bit in K0 represents a null
-	   byte.  */
+	/* Check the first VEC_SIZE bytes.  Each bit in K0 represents a
+	   null byte.  */
 	VPCMP	$0, (%rdi), %YMMZERO, %k0
-	// vmovdqu64   (%rdi), %ymm20
-	// VPCMP   $0, %ymm20, %YMMZERO, %k0
 	kmovd	%k0, %eax
 # ifdef USE_AS_STRNLEN
 	/* If length < CHAR_PER_VEC handle special.  */
@@ -95,20 +92,21 @@ L(zero):
 
 	.p2align 4
 L(first_vec_x0):
-	/* Set bit for max len so that tzcnt will return min of max len and
-	   position of first match.  */
+	/* Set bit for max len so that tzcnt will return min of max len
+	   and position of first match.  */
 	btsq	%rsi, %rax
 	tzcntl	%eax, %eax
 	ret
 # endif
-//	NOP16
+
 	.p2align 4
 L(first_vec_x1):
 	tzcntl	%eax, %eax
-	/* Safe to use 32 bit instructions as these are only called for size =
-	   [1, 159].  */
+	/* Safe to use 32 bit instructions as these are only called for
+	   size = [1, 159].  */
 # ifdef USE_AS_STRNLEN
-	/* Use ecx which was computed earlier to compute correct value.  */
+	/* Use ecx which was computed earlier to compute correct value.
+	 */
 	leal	-(CHAR_PER_VEC * 4 + 1)(%rcx, %rax), %eax
 # else
 	subl	%edx, %edi
@@ -123,10 +121,11 @@ L(first_vec_x1):
 	.p2align 4
 L(first_vec_x2):
 	tzcntl	%eax, %eax
-	/* Safe to use 32 bit instructions as these are only called for size =
-	   [1, 159].  */
+	/* Safe to use 32 bit instructions as these are only called for
+	   size = [1, 159].  */
 # ifdef USE_AS_STRNLEN
-	/* Use ecx which was computed earlier to compute correct value.  */
+	/* Use ecx which was computed earlier to compute correct value.
+	 */
 	leal	-(CHAR_PER_VEC * 3 + 1)(%rcx, %rax), %eax
 # else
 	subl	%edx, %edi
@@ -141,10 +140,11 @@ L(first_vec_x2):
 	.p2align 4
 L(first_vec_x3):
 	tzcntl	%eax, %eax
-	/* Safe to use 32 bit instructions as these are only called for size =
-	   [1, 159].  */
+	/* Safe to use 32 bit instructions as these are only called for
+	   size = [1, 159].  */
 # ifdef USE_AS_STRNLEN
-	/* Use ecx which was computed earlier to compute correct value.  */
+	/* Use ecx which was computed earlier to compute correct value.
+	 */
 	leal	-(CHAR_PER_VEC * 2 + 1)(%rcx, %rax), %eax
 # else
 	subl	%edx, %edi
@@ -159,10 +159,11 @@ L(first_vec_x3):
 	.p2align 4
 L(first_vec_x4):
 	tzcntl	%eax, %eax
-	/* Safe to use 32 bit instructions as these are only called for size =
-	   [1, 159].  */
+	/* Safe to use 32 bit instructions as these are only called for
+	   size = [1, 159].  */
 # ifdef USE_AS_STRNLEN
-	/* Use ecx which was computed earlier to compute correct value.  */
+	/* Use ecx which was computed earlier to compute correct value.
+	 */
 	leal	-(CHAR_PER_VEC + 1)(%rcx, %rax), %eax
 # else
 	subl	%edx, %edi
@@ -180,10 +181,11 @@ L(aligned_more):
 	/* Align data to VEC_SIZE.  */
 	andq	$-(VEC_SIZE), %rdi
 L(cross_page_continue):
-	/* Check the first 4 * VEC_SIZE.  Only one VEC_SIZE at a time since data
-	   is only aligned to VEC_SIZE.  */
+	/* Check the first 4 * VEC_SIZE.  Only one VEC_SIZE at a time
+	   since data is only aligned to VEC_SIZE.  */
 # ifdef USE_AS_STRNLEN
-	/* + CHAR_SIZE because it simplies the logic in last_4x_vec_or_less.  */
+	/* + CHAR_SIZE because it simplies the logic in
+	   last_4x_vec_or_less.  */
 	leaq	(VEC_SIZE * 5 + CHAR_SIZE)(%rdi), %rcx
 	subq	%rdx, %rcx
 #  ifdef USE_AS_WCSLEN
@@ -193,8 +195,6 @@ L(cross_page_continue):
 # endif
 	/* Load first VEC regardless.  */
 	VPCMP	$0, VEC_SIZE(%rdi), %YMMZERO, %k0
-	// VMOVA   VEC_SIZE(%rdi), %ymm20
-	// VPCMP   $0, %ymm20, %YMMZERO, %k0
 # ifdef USE_AS_STRNLEN
 	/* Adjust length. If near end handle specially.  */
 	subq	%rcx, %rsi
@@ -246,9 +246,10 @@ L(loop_4x_vec):
 	subq	$(CHAR_PER_VEC * 4), %rsi
 	jb	L(last_4x_vec_or_less_cmpeq)
 # endif
-	/* Save some code size by microfusing VPMINU with the load. Since the
-	   matches in ymm2/ymm4 can only be returned if there where no matches
-	   in ymm1/ymm3 respectively there is no issue with overlap.  */
+	/* Save some code size by microfusing VPMINU with the load. Since
+	   the matches in ymm2/ymm4 can only be returned if there where no
+	   matches in ymm1/ymm3 respectively there is no issue with overlap.
+	 */
 	VPMINU	(VEC_SIZE * 5)(%rdi), %YMM1, %YMM2
 	VMOVA	(VEC_SIZE * 6)(%rdi), %YMM3
 	VPMINU	(VEC_SIZE * 7)(%rdi), %YMM3, %YMM4
@@ -256,7 +257,7 @@ L(loop_4x_vec):
 	VPCMP	$0, %YMM2, %YMMZERO, %k0
 	VPCMP	$0, %YMM4, %YMMZERO, %k1
 	subq	$-(VEC_SIZE * 4), %rdi
-	kortestd %k0, %k1
+	kortestd	%k0, %k1
 	jz	L(loop_4x_vec)
 
 	/* Check if end was in first half.  */
@@ -300,8 +301,8 @@ L(last_4x_vec_or_less):
 	jnz	L(last_4x_vec)
 
 	/* length may have been negative or positive by an offset of
-	   CHAR_PER_VEC * 4 depending on where this was called from. This fixes
-	   that.  */
+	   CHAR_PER_VEC * 4 depending on where this was called from. This
+	   fixes that.  */
 	andl	$(CHAR_PER_VEC * 4 - 1), %esi
 	testl	%eax, %eax
 	jnz	L(last_vec_x1_check)
@@ -329,18 +330,18 @@ L(max):
 	ret
 # endif
 
-	/* Placed here in strnlen so that the jcc L(last_4x_vec_or_less) in the
-	   4x VEC loop can use 2 byte encoding.  */
+	/* Placed here in strnlen so that the jcc L(last_4x_vec_or_less)
+	   in the 4x VEC loop can use 2 byte encoding.  */
 	.p2align 4
 L(second_vec_return):
 	VPCMP	$0, %YMM3, %YMMZERO, %k0
 	/* Combine YMM3 matches (k0) with YMM4 matches (k1).  */
 # ifdef USE_AS_WCSLEN
-	kunpckbw %k0, %k1, %k0
+	kunpckbw	%k0, %k1, %k0
 	kmovd	%k0, %eax
 	tzcntl	%eax, %eax
 # else
-	kunpckdq %k0, %k1, %k0
+	kunpckdq	%k0, %k1, %k0
 	kmovq	%k0, %rax
 	tzcntq	%rax, %rax
 # endif
@@ -440,7 +441,7 @@ L(max_end):
 	ret
 # endif
 
-	/* Cold case for crossing page with first load.  */
+	/* Cold case for crossing page with first load.	 */
 	.p2align 4
 L(cross_page_boundary):
 	movq	%rdi, %rdx
@@ -450,8 +451,8 @@ L(cross_page_boundary):
 	kmovd	%k0, %eax
 	/* Remove the leading bytes.  */
 # ifdef USE_AS_WCSLEN
-	/* NB: Divide shift count by 4 since each bit in K0 represent 4 bytes.
-	 */
+	/* NB: Divide shift count by 4 since each bit in K0 represent 4
+	   bytes.  */
 	movl	%edx, %ecx
 	shrl	$2, %ecx
 	andl	$(CHAR_PER_VEC - 1), %ecx
@@ -484,6 +485,5 @@ L(cross_page_less_vec):
 	ret
 # endif
 
-	.p2align 12
-END(STRLEN)
+END (STRLEN)
 #endif

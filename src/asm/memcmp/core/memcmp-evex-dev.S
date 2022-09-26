@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 #include "../../libc-asm-common.h"
 #if IS_IN (libc)
-# include "../../libc-defs/libc-avx512-vecs.h"
+# include "../../libc-defs/libc-evex512-vecs.h"
 # ifndef HAS_VEC
 #  include "../../libc-defs/libc-evex-vecs.h"
 # endif

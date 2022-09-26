@@ -24,9 +24,13 @@
         }                                                                      \
     }
 
+#define I_expand_impl1(base, func)                                             \
+    CAT(base, _, func, _dev), CAT(base, _, func, _glibc)
+#define I_expand_impl0(...) I_expand_impl1(__VA_ARGS__)
+#define I_expand_impl(...)  I_expand_impl0(DEPAREN(__VA_ARGS__))
 
-#define expand_impl(func) CAT(func, _dev), CAT(func, _glibc)
-#define expand_impls(...) APPLY2(expand_impl, COMMA, __VA_ARGS__)
+#define expand_impls(base, ...)                                                \
+    APPLY2(I_expand_impl, COMMA, APPLY_PACKL(base, __VA_ARGS__))
 
 #define decl_func(base, fwd_decl, ...)                                         \
     extern int32_t test_name(base)(void const *);                              \

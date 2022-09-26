@@ -12,13 +12,14 @@
                 : (maxlen ? func.run_strnlen(CAST(char const *, s), (n))       \
                           : func.run_strlen(CAST(char const *, s))))
 #else
-static size_t simple_strnlen(uint8_t const * s, size_t n) {
+static size_t
+simple_strnlen(uint8_t const * s, size_t n) {
     size_t i = 0;
-    for(;;) {
-        if(i >= n) {
+    for (;;) {
+        if (i >= n) {
             goto done;
         }
-        if(s[i] == 0) {
+        if (s[i] == 0) {
             goto done;
         }
         ++i;
@@ -29,13 +30,21 @@ done:
 
 #define run(s, n) simple_strnlen(s, n)
 #endif
+
 #define INIT_I 0
-#define INIT_J 320
-#define INIT_K 325
+#define INIT_J 0
+#define INIT_K 1
+
+#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
+
+#ifndef PRINTV
+#define PRINTV(...)
+#endif
+
 
 #define TEST_ERR                                                               \
-    "(%zu != %zu): align=%zu, strlen=%zu, maxlen=%zu, wsize=%zu\n", res,       \
-        expec, i, j, k, wsize
+    "(r != e): (%zu != %zu): align=%zu, strlen=%zu, maxlen=%zu, wsize=%zu\n",  \
+        res, expec, i, j, k, wsize
 
 static int32_t
 test_strlen_kernel(void const * test_f,
@@ -44,17 +53,21 @@ test_strlen_kernel(void const * test_f,
                    uint64_t     wsize) {
     func_switch_t func = { test_f };
     (void)(func);
-    uint8_t *     buf  = make_buf(test_size);
-    uint8_t *     test_buf;
-    uint64_t      i, j, k;
-    uint64_t      wsize_shift = wsize == 4 ? 2 : 0;
+    uint8_t * buf;
+    uint8_t * test_buf;
+    uint64_t  i, j, k;
+    uint64_t  wsize_shift = wsize == 4 ? 2 : 0;
+    uint32_t  next        = 0;
+    buf                   = make_buf(test_size);
+
+
     die_assert(wsize == 1 || wsize == 4);
 
     memset_c(buf, 0x1, test_size);
 
     for (i = INIT_I; i < nalignments * 2; ++i) {
         uint64_t al_offset = ROUNDUP_P2(alignments[i % nalignments], wsize);
-        fprintf(stderr, "%lu\n", i);
+        fprintf(stderr, "%lu -> %lu\n", i, al_offset);
         al_offset = (i >= nalignments ? PAGE_SIZE - al_offset : al_offset);
         if (al_offset > test_size) {
             continue;
@@ -65,26 +78,58 @@ test_strlen_kernel(void const * test_f,
         for (j = INIT_J; j < test_max; j += wsize) {
             uint64_t res, expec;
             memset_c(test_buf + j, 0x0, wsize);
-            for (k = INIT_K; k < MIN(test_max, j + 320); k += wsize) {
-                //                fprintf(stderr, "%lu:%lu:%lu\n", i, j, k);
-                expec = j;
-                if (maxlen && k < j) {
-                    expec = k;
+            for (k = INIT_K; k < MIN(test_max, j + 620); k += wsize) {
+                if (al_offset) {
+                    memset(buf, 0x0, wsize);
+                    if (al_offset > 128) {
+                        memset(buf + 128, 0x0, wsize);
+                    }
                 }
-                expec >>= wsize_shift;
 
-                res = run(test_buf, k >> wsize_shift);
 
-                test_assert(expec == res, TEST_ERR);
+                PRINTV("%lu(%lu):%lu:%lu\n", i, al_offset, j, k);
+                for (next = 0; next <= 128;
+                     next = (next == 0 ? 32 : (next + next))) {
+                    if (1 && next && j + next < test_max) {
+                        memset_c(test_buf + j + next, 0x0, wsize);
+                    }
+
+                    expec = j;
+                    if (maxlen && k < j) {
+                        expec = k;
+                    }
+
+                    expec >>= wsize_shift;
+
+                    res = run(test_buf, k >> wsize_shift);
+
+                    test_assert(expec == res, TEST_ERR);
+
+
+                    if (maxlen) {
+                        memset_c(test_buf + j, 0x1, wsize);
+                        expec = k;
+                        if (next && (j + next < expec)) {
+                            expec = j + next;
+                        }
+
+                        expec >>= wsize_shift;
+
+                        res = run(test_buf, k >> wsize_shift);
+                        test_assert(expec == res, TEST_ERR)
+
+                            memset_c(test_buf + j, 0x0, wsize);
+                        ;
+                    }
+
+                    if (1 && next && j + next < test_max) {
+                        memset_c(test_buf + j + next, 0x1, wsize);
+                    }
+                }
+
                 if (!maxlen) {
                     break;
                 }
-                memset_c(test_buf + j, 0x1, wsize);
-                expec = k >> wsize_shift;
-
-                res = run(test_buf, k >> wsize_shift);
-
-                test_assert(expec == res, TEST_ERR);
                 memset_c(test_buf + j, 0x0, wsize);
             }
 
@@ -95,19 +140,19 @@ test_strlen_kernel(void const * test_f,
                 test_assert(expec == res, TEST_ERR);
 
 
-                k     = -63UL;
-                res   = run(test_buf, k);
+                k   = -63UL;
+                res = run(test_buf, k);
                 test_assert(expec == res, TEST_ERR);
 
-                k     = -64UL;
-                res   = run(test_buf, k);
+                k   = -64UL;
+                res = run(test_buf, k);
                 test_assert(expec == res, TEST_ERR);
 
-                k     = -65UL;
-                res   = run(test_buf, k);
-                test_assert(expec == res, TEST_ERR);                                
+                k   = -65UL;
+                res = run(test_buf, k);
+                test_assert(expec == res, TEST_ERR);
 
-                
+
                 k   = 1UL << 63;
                 res = run(test_buf, k);
                 test_assert(expec == res, TEST_ERR);
@@ -121,8 +166,17 @@ test_strlen_kernel(void const * test_f,
             if (j + 128 < test_max) {
                 memset_c(test_buf + j + 128, 0x1, wsize);
             }
+
+            if (al_offset) {
+                memset(buf, 0x1, wsize);
+                if (al_offset > 128) {
+                    memset(buf + 128, 0x1, wsize);
+                }
+            }
         }
     }
+    free_buf(buf, test_size);
+
     return 0;
 }
 

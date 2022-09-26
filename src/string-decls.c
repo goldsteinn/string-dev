@@ -35,45 +35,42 @@
 #define decl_wcsnlen(func) extern size_t func(wchar_t const *, size_t)
 #define decl_memset(func)  extern void func(void const *, int, size_t)
 
-#define STRRCHR_IMPLS expand_impls(strrchr_evex, strrchr_avx2, strrchr_sse2)
-#define WCSRCHR_IMPLS expand_impls(wcsrchr_evex, wcsrchr_avx2, wcsrchr_sse2)
-#define MEMCPY_IMPLS  expand_impls(memcpy_ssse3)
+#define STRRCHR_IMPLS expand_impls(strrchr, evex, avx2, sse2)
+#define WCSRCHR_IMPLS expand_impls(wcsrchr, evex, avx2, sse2)
+#define MEMCPY_IMPLS  expand_impls(memcpy, ssse3)
 #define MEMCMP_IMPLS                                                           \
-    expand_impls(memcmp_ssse3, memcmp_sse2, memcmp_sse4, memcmp_avx2,          \
-                 memcmp_evex),                                                 \
-        memcmp_evex512_dev
+    expand_impls(memcmp, ssse3, sse2, sse4, avx2, evex), memcmp_evex512_dev
 #define WMEMCMP_IMPLS                                                          \
-    expand_impls(wmemcmp_sse2, wmemcmp_sse4, wmemcmp_avx2, wmemcmp_evex),      \
-        wmemcmp_evex512_dev
+    expand_impls(wmemcmp, sse2, sse4, avx2, evex), wmemcmp_evex512_dev
 #define MEMCMPEQ_IMPLS                                                         \
-    expand_impls(memcmpeq_ssse3, memcmpeq_sse2, memcmpeq_sse4, memcmpeq_evex), \
-        memcmpeq_evex512_dev
-#define MEMRCHR_IMPLS   expand_impls(memrchr_avx2, memrchr_evex, memrchr_sse2)
-#define MEMCHR_IMPLS    expand_impls(memchr_sse2, memchr_evex, memchr_avx2)
+    expand_impls(memcmpeq, ssse3, sse2, sse4, evex), memcmpeq_evex512_dev
+#define MEMRCHR_IMPLS expand_impls(memrchr, avx2, evex, sse2)
+#define MEMCHR_IMPLS                                                           \
+    expand_impls(memchr, sse2, evex, avx2), memchr_evex512_dev
 #define RAWMEMCHR_IMPLS rawmemchr_evex_dev, rawmemchr_avx2_dev
 #define WMEMCHR_IMPLS                                                          \
-    expand_impls(wmemchr_sse2), wmemchr_evex_dev, wmemchr_avx2_dev
-#define STRLEN_IMPLS  expand_impls(strlen_evex), strlen_evex512_dev
-#define STRNLEN_IMPLS expand_impls(strnlen_evex), strnlen_evex512_dev
-#define WCSLEN_IMPLS  expand_impls(wcslen_evex), wcslen_evex512_dev
-#define WCSNLEN_IMPLS expand_impls(wcsnlen_evex), wcsnlen_evex512_dev
-#define STRCPY_IMPLS  expand_impls(strcpy_sse2, strcpy_avx2, strcpy_evex)
-#define STRCAT_IMPLS  expand_impls(strcat_sse2, strcat_avx2, strcat_evex)
-#define STPCPY_IMPLS  expand_impls(stpcpy_sse2, stpcpy_avx2, stpcpy_evex)
-#define STRNCPY_IMPLS expand_impls(strncpy_sse2, strncpy_avx2, strncpy_evex)
-#define STRNCAT_IMPLS expand_impls(strncat_sse2, strncat_avx2, strncat_evex)
-#define STPNCPY_IMPLS expand_impls(stpncpy_sse2, stpncpy_avx2, stpncpy_evex)
-#define STRLCPY_IMPLS expand_impls(strlcpy_sse2, strlcpy_avx2, strlcpy_evex)
-#define STRLCAT_IMPLS expand_impls(strlcat_sse2, strlcat_avx2, strlcat_evex)
+    expand_impls(wmemchr, sse2), wmemchr_evex_dev, wmemchr_avx2_dev
+#define STRLEN_IMPLS  expand_impls(strlen, sse2, avx2, evex, evex512)
+#define STRNLEN_IMPLS expand_impls(strnlen, sse2, avx2, evex, evex512)
+#define WCSLEN_IMPLS  expand_impls(wcslen, sse2, avx2, evex, evex512)
+#define WCSNLEN_IMPLS expand_impls(wcsnlen, sse2, avx2, evex, evex512)
+#define STRCPY_IMPLS  expand_impls(strcpy, sse2, avx2, evex)
+#define STRCAT_IMPLS  expand_impls(strcat, sse2, avx2, evex)
+#define STPCPY_IMPLS  expand_impls(stpcpy, sse2, avx2, evex)
+#define STRNCPY_IMPLS expand_impls(strncpy, sse2, avx2, evex)
+#define STRNCAT_IMPLS expand_impls(strncat, sse2, avx2, evex)
+#define STPNCPY_IMPLS expand_impls(stpncpy, sse2, avx2, evex)
+#define STRLCPY_IMPLS expand_impls(strlcpy, sse2, avx2, evex)
+#define STRLCAT_IMPLS expand_impls(strlcat, sse2, avx2, evex)
 
-#define WCSCPY_IMPLS  expand_impls(wcscpy_sse2, wcscpy_avx2, wcscpy_evex)
-#define WCSCAT_IMPLS  expand_impls(wcscat_sse2, wcscat_avx2, wcscat_evex)
-#define WCPCPY_IMPLS  expand_impls(wcpcpy_sse2, wcpcpy_avx2, wcpcpy_evex)
-#define WCSNCPY_IMPLS expand_impls(wcsncpy_sse2, wcsncpy_avx2, wcsncpy_evex)
-#define WCSNCAT_IMPLS expand_impls(wcsncat_sse2, wcsncat_avx2, wcsncat_evex)
-#define WCPNCPY_IMPLS expand_impls(wcpncpy_sse2, wcpncpy_avx2, wcpncpy_evex)
-#define WCSLCPY_IMPLS expand_impls(wcslcpy_sse2, wcslcpy_avx2, wcslcpy_evex)
-#define WCSLCAT_IMPLS expand_impls(wcslcat_sse2, wcslcat_avx2, wcslcat_evex)
+#define WCSCPY_IMPLS  expand_impls(wcscpy, sse2, avx2, evex)
+#define WCSCAT_IMPLS  expand_impls(wcscat, sse2, avx2, evex)
+#define WCPCPY_IMPLS  expand_impls(wcpcpy, sse2, avx2, evex)
+#define WCSNCPY_IMPLS expand_impls(wcsncpy, sse2, avx2, evex)
+#define WCSNCAT_IMPLS expand_impls(wcsncat, sse2, avx2, evex)
+#define WCPNCPY_IMPLS expand_impls(wcpncpy, sse2, avx2, evex)
+#define WCSLCPY_IMPLS expand_impls(wcslcpy, sse2, avx2, evex)
+#define WCSLCAT_IMPLS expand_impls(wcslcat, sse2, avx2, evex)
 
 
 #define MEMSET_IMPLS memset_sse2_glibc, memset_sse2_erms_glibc
@@ -121,7 +118,6 @@ decl_func(wcsncat, decl_wcsncpy, WCSNCAT_IMPLS);
 decl_func(wcpncpy, decl_wcsncpy, WCPNCPY_IMPLS);
 decl_func(wcslcpy, decl_wcsncpy, WCSLCPY_IMPLS);
 decl_func(wcslcat, decl_wcsncpy, WCSLCAT_IMPLS);
-
 
 
 custom_make_decls(decl_list_t,

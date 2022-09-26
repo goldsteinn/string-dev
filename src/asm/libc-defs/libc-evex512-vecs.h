@@ -28,4 +28,8 @@
 #define VEC_ymm VEC_hi_ymm
 #define VEC     VEC_hi_zmm
 
+#define VEC_lo VEC_any_zmm
+
+#include "libc-reg-macros.h"
+
 #endif

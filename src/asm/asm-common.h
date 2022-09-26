@@ -35,7 +35,7 @@
 #endif
 
 #if ALIGN_ENTRY == 0
-#define ENTRY(name) ENTRY_P2ALIGN(name, 4)
+#define ENTRY(name) ENTRY_P2ALIGN(name, 12)
 
 #elif ALIGN_ENTRY == 48
 #define ENTRY_P2ALIGN(name)                                                    \

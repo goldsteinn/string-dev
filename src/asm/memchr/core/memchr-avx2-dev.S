@@ -21,40 +21,40 @@
 	// # include <sysdep.h>
 
 # ifndef MEMCHR
-#  define MEMCHR				__memchr_avx2
+#  define MEMCHR	__memchr_avx2
 # endif
 
 # ifdef USE_AS_WMEMCHR
-#  define VPCMPEQ				vpcmpeqd
-#  define VPBROADCAST			vpbroadcastd
-#  define CHAR_SIZE			4
+#  define VPCMPEQ	vpcmpeqd
+#  define VPBROADCAST	vpbroadcastd
+#  define CHAR_SIZE	4
 # else
-#  define VPCMPEQ				vpcmpeqb
-#  define VPBROADCAST			vpbroadcastb
-#  define CHAR_SIZE			1
+#  define VPCMPEQ	vpcmpeqb
+#  define VPBROADCAST	vpbroadcastb
+#  define CHAR_SIZE	1
 # endif
 
 # ifdef USE_AS_RAWMEMCHR
-#  define ERAW_PTR_REG			ecx
-#  define RRAW_PTR_REG			rcx
-#  define ALGN_PTR_REG			rdi
+#  define ERAW_PTR_REG	ecx
+#  define RRAW_PTR_REG	rcx
+#  define ALGN_PTR_REG	rdi
 # else
-#  define ERAW_PTR_REG			edi
-#  define RRAW_PTR_REG			rdi
-#  define ALGN_PTR_REG			rcx
+#  define ERAW_PTR_REG	edi
+#  define RRAW_PTR_REG	rdi
+#  define ALGN_PTR_REG	rcx
 # endif
 
 # ifndef VZEROUPPER
-#  define VZEROUPPER			vzeroupper
+#  define VZEROUPPER	vzeroupper
 # endif
 // abf-off
 # ifndef SECTION
 #  define SECTION(p)	p##.avx
 # endif
 // abf-on
-# define VEC_SIZE			32
-# define PAGE_SIZE			4096
-# define CHAR_PER_VEC			(VEC_SIZE / CHAR_SIZE)
+# define VEC_SIZE	32
+# define PAGE_SIZE	4096
+# define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
 
 	.section SECTION(.text), "ax", @progbits
 ENTRY_P2ALIGN(MEMCHR, 5)
@@ -72,19 +72,25 @@ ENTRY_P2ALIGN(MEMCHR, 5)
 	vmovd	%esi, %xmm0
 	VPBROADCAST %xmm0, %ymm0
 	/* Check if we may cross page boundary with one vector load.  */
+# if 0
 	movl	%edi, %eax
 	andl	$(PAGE_SIZE - 1), %eax
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
 	ja	L(cross_page_boundary)
-
+# else
 	/* Check the first VEC_SIZE bytes.  */
+	movq	%rdi, %rcx
+	andq	$-VEC_SIZE, %rdi
+# endif
 	VPCMPEQ	(%rdi), %ymm0, %ymm1
 	vpmovmskb %ymm1, %eax
+
 # ifndef USE_AS_RAWMEMCHR
 	/* If length < CHAR_PER_VEC handle special.  */
 	cmpq	$CHAR_PER_VEC, %rdx
 	jbe	L(first_vec_x0)
 # endif
+	shlxl	%ecx, %eax, %eax
 	testl	%eax, %eax
 	jz	L(aligned_more)
 	bsfl	%eax, %eax
