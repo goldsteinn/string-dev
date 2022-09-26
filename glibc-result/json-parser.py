@@ -148,8 +148,11 @@ class Displayable():
         #out = add_offset(out)
         #out = csv_add(self.hdr, str(round(self.times[0], 3)))
         if self.times[1] is not None:
-            score = round(self.times[0] / self.times[1], 3)
+            t0, t1, score = self.get_cmp_score(self.times[0],
+                                               self.times[1])            
             #out = csv_add(out, str(round(self.times[1], 3)))
+            out = csv_add(out, t0)
+            out = csv_add(out, t1)
             out = csv_add(out, str(score))
         return out + "\n"
 
@@ -170,7 +173,12 @@ class Result():
             self.timings[ifunc] = []
 
     def add_times(self, times):
-        assert len(times) == len(self.ifuncs)
+        if len(times) != len(self.ifuncs):
+            assert len(times) + 1 == len(self.ifuncs)
+            assert "__strnlen_evex" in self.ifuncs
+            idx = self.ifuncs.index("__strnlen_evex")
+            times.insert(idx, 0.0)
+        assert len(times) == len(self.ifuncs), "{} != {}".format(times, self.ifuncs)
         for i in range(0, len(self.ifuncs)):
             #            if int(self.length) == 8192 and int(self.align1) == 0 and int(self.align2) == 0:
             #                print("{} -> {}".format(self.ifuncs[i], times[i]))
@@ -284,6 +292,7 @@ class JsonFile():
     def load_file(self, fname):
         if os.access(fname, os.R_OK) is False:
             return None
+        print(fname)
         with open(fname) as json_file:
             return json.load(json_file)
 
@@ -388,7 +397,8 @@ class JsonFile():
             sz, self.fields = set_if_exists(result, "maxlen", sz, self.fields)
             sz, self.fields = set_if_exists(result, "n", sz, self.fields)
             sz, self.fields = set_if_exists(result, "strlen", sz, self.fields)
-
+            if int(sz) == 8192:
+                continue
             key = get_key(length, align1, align2, dgs, wfs, sz)
             if self.ifuncs is None:
                 self.ifuncs = ifuncs
@@ -401,7 +411,7 @@ class JsonFile():
             self.all_results[key].add_times(result["timings"])
 
     def parse_all_files(self):
-        for i in range(0, 5):
+        for i in range(0, 20):
             file_path = self.file_fmt.format(i)
             json_obj = self.load_file(file_path)
             if json_obj is None:
