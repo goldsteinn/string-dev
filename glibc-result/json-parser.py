@@ -7,6 +7,8 @@ import os
 import re
 import copy
 
+#print(" ".join(sys.argv))
+
 version_dirs = []
 
 for version in sys.argv[1].split(","):
@@ -40,9 +42,11 @@ for benchmark in benchmarks:
 time_offset = 4
 
 
-def get_key(length, align1, align2, dgs, wfs, sz):
-    return str(length) + "-" + str(align1) + "-" + str(align2) + "-" + str(
-        dgs) + "-" + str(wfs) + "-" + str(sz)
+def get_key(d):
+    out = []
+    for k in sorted(d):
+        out.append("{}={}".format(k, d[k]))
+    return "--".join(out)
 
 
 def get_stat(times):
@@ -148,8 +152,7 @@ class Displayable():
         #out = add_offset(out)
         #out = csv_add(self.hdr, str(round(self.times[0], 3)))
         if self.times[1] is not None:
-            t0, t1, score = self.get_cmp_score(self.times[0],
-                                               self.times[1])            
+            t0, t1, score = self.get_cmp_score(self.times[0], self.times[1])
             #out = csv_add(out, str(round(self.times[1], 3)))
             out = csv_add(out, t0)
             out = csv_add(out, t1)
@@ -159,15 +162,10 @@ class Displayable():
 
 class Result():
 
-    def __init__(self, ifuncs, fields, length, align1, align2, dgs, wfs, sz):
+    def __init__(self, ifuncs, kclass, rfields):
         self.ifuncs = ifuncs
-        self.fields = fields
-        self.length = length
-        self.align1 = align1
-        self.align2 = align2
-        self.dgs = dgs
-        self.wfs = wfs
-        self.sz = sz
+        self.kclass = kclass
+        self.rfields = copy.deepcopy(rfields)
         self.timings = {}
         for ifunc in ifuncs:
             self.timings[ifunc] = []
@@ -178,7 +176,8 @@ class Result():
             assert "__strnlen_evex" in self.ifuncs
             idx = self.ifuncs.index("__strnlen_evex")
             times.insert(idx, 0.0)
-        assert len(times) == len(self.ifuncs), "{} != {}".format(times, self.ifuncs)
+        assert len(times) == len(self.ifuncs), "{} != {}".format(
+            times, self.ifuncs)
         for i in range(0, len(self.ifuncs)):
             #            if int(self.length) == 8192 and int(self.align1) == 0 and int(self.align2) == 0:
             #                print("{} -> {}".format(self.ifuncs[i], times[i]))
@@ -190,10 +189,24 @@ class Result():
 
         return get_stat(self.timings[ifunc])
 
-    def get_hdr(self):
+    def get_hdr(self, all_fields):
         out = ""
-        for f in self.fields:
-            out = csv_add(out, self.fields[f])
+
+        corr_order = []
+        my_order = []
+        for f in sorted(self.rfields):
+            corr_order.append(f)
+
+        for f in sorted(self.rfields):
+            my_order.append(f)
+
+        for f in corr_order:
+            if f not in self.rfields:
+                assert False
+                out = csv_add(out, "nil")
+            else:
+                out = csv_add(out, self.rfields[f])
+
         return out
         out = csv_add("", self.length)
         out = csv_add(out, self.align1)
@@ -204,11 +217,11 @@ class Result():
             out = csv_add(out, str(self.sz))
         else:
             out = csv_add(out, self.sz)
+        out = csv_add(out, self.branch)
         return out
 
     def result_key(self):
-        return get_key(self.length, self.align1, self.align2, self.dgs,
-                       self.wfs, self.sz)
+        return get_key(self.rfields)
 
 
 class JsonFile():
@@ -221,6 +234,18 @@ class JsonFile():
         self.bench_func = ""
         self.fields = {}
 
+        self.key_classes = {}
+
+    def csv_name(self):
+        names = self.file_fmt.split("/")
+        for name in reversed(names):
+            if "{}" in name:
+                continue
+            if name.lstrip().rstrip() == "":
+                continue
+            return name.lower()
+        return ""
+
     def name(self, impl):
         global score_cmp
         if score_cmp is None:
@@ -232,9 +257,9 @@ class JsonFile():
             ret = "Cur"
         return ret + "-" + impl
 
-    def out_fields(self):
+    def out_fields(self, kclass):
         out = ""
-        for field in self.fields:
+        for field in sorted(self.key_classes[kclass]):
             out = csv_add(out, field)
         return out
 
@@ -244,21 +269,23 @@ class JsonFile():
                               len("bench-"):self.file_fmt.find("{}")]
         return "\nResults For: {}".format(bench)
 
-    def csv_hdr(self, other, impls):
-        out = self.out_fields()
+    def csv_hdr(self, other, impls, kclass):
+        out = self.out_fields(kclass)
         out = add_offset(out)
         for i in range(0, len(impls)):
-            out = csv_add(out, self.name(impls[i]))
+            out = csv_add(out, self.csv_name())
             if other is not None:
-                out = csv_add(out, other.name(impls[i]))
-                out = csv_add(out, "Score-{}".format(impls[i]))
+                out = csv_add(out, other.csv_name())
+                out = csv_add(out, "{}/{}".format(self.csv_name(), other.csv_name()))
             if i != len(impls) - 1:
                 out += ","
 
         return out
 
     def find_ifunc(self, impl):
-        impl_pattern = "^" + impl.replace("*", ".*") + "$"
+        impl_pattern = impl.replace("*", "STAR")
+        impl_pattern = "^" + impl.replace("STAR", ".*") + "$"
+
         for ifunc in self.ifuncs:
             if re.match(impl_pattern, ifunc) is not None:
                 return ifunc
@@ -310,16 +337,17 @@ class JsonFile():
         assert self.bench_func == k
 
     def get_results2(self, json_obj):
+        assert False
         results = json_obj["functions"]
         for func in results:
             if self.get_bench_func() not in func:
                 continue
-            key = get_key(func, None, None, None, None, None)
+
+            key = get_key(func, None, None, None, None, None, None)
             if key not in self.all_results:
                 self.key_order.append(key)
                 self.all_results[key] = Result(self.get_bench_func(),
-                                               self.fields, func, None, None,
-                                               None, None, None)
+                                               self.fields)
             self.all_results[key].add_times([results["mean"]])
 
     def get_results(self, json_obj):
@@ -344,7 +372,7 @@ class JsonFile():
             length, self.fields = set_if_exists(result, "length", length,
                                                 self.fields)
             length, self.fields = set_if_exists(result, "len_haystack", length,
-                                                self.fields)            
+                                                self.fields)
             length, self.fields = set_if_exists(result, "max-alignment",
                                                 length, self.fields)
             length, self.fields = set_if_exists(result, "len", length,
@@ -353,8 +381,8 @@ class JsonFile():
                                                 self.fields)
             align1, self.fields = set_if_exists(result, "align1", align1,
                                                 self.fields)
-            align1, self.fields = set_if_exists(result, "align_haystack", align1,
-                                                self.fields)            
+            align1, self.fields = set_if_exists(result, "align_haystack",
+                                                align1, self.fields)
             align1, self.fields = set_if_exists(result, "alignment", align1,
                                                 self.fields)
             align1, self.fields = set_if_exists(result, "align", align1,
@@ -362,11 +390,10 @@ class JsonFile():
             align2, self.fields = set_if_exists(result, "align2", align2,
                                                 self.fields)
             align2, self.fields = set_if_exists(result, "align_needle", align2,
-                                                self.fields)            
+                                                self.fields)
             dgs, self.fields = set_if_exists(result, "dst > src", dgs,
                                              self.fields)
-            dgs, self.fields = set_if_exists(result, "fail", dgs,
-                                             self.fields)            
+            dgs, self.fields = set_if_exists(result, "fail", dgs, self.fields)
             dgs, self.fields = set_if_exists(result, "lat", dgs, self.fields)
 
             wfs, self.fields = set_if_exists(result, "with-fixed-size", wfs,
@@ -387,7 +414,7 @@ class JsonFile():
             sz, self.fields = set_if_exists(result, "invert_pos", sz,
                                             self.fields)
             sz, self.fields = set_if_exists(result, "len_needle", sz,
-                                            self.fields)            
+                                            self.fields)
 
             sz, self.fields = set_if_exists(result, "overlap", sz, self.fields)
             sz, self.fields = set_if_exists(result, "size", sz, self.fields)
@@ -397,17 +424,27 @@ class JsonFile():
             sz, self.fields = set_if_exists(result, "maxlen", sz, self.fields)
             sz, self.fields = set_if_exists(result, "n", sz, self.fields)
             sz, self.fields = set_if_exists(result, "strlen", sz, self.fields)
-            if int(sz) == 8192:
-                continue
-            key = get_key(length, align1, align2, dgs, wfs, sz)
+
+            this_fields = {}
+            for k in result:
+                if k != "timings":
+                    this_fields[k] = True
+
+            kclass = get_key(this_fields)
+            self.key_classes[kclass] = copy.deepcopy(this_fields)
+
+            rfields = copy.deepcopy(result)
+            rfields.pop("timings")
+
             if self.ifuncs is None:
                 self.ifuncs = ifuncs
 
+            key = get_key(rfields)
             assert self.ifuncs == ifuncs
             if key not in self.all_results:
                 self.key_order.append(key)
-                self.all_results[key] = Result(ifuncs, copy.deepcopy(self.fields), length,
-                                               align1, align2, dgs, wfs, sz)
+                self.all_results[key] = Result(ifuncs, kclass,
+                                               copy.deepcopy(rfields))
             self.all_results[key].add_times(result["timings"])
 
     def parse_all_files(self):
@@ -446,85 +483,115 @@ class JsonFile():
 
         assert len(impls) == len(impl_ifuncs)
         print(self.func_hdr())
-        print(self.out_fields())
-        for key in self.key_order:
-            hdr = self.all_results[key].get_hdr()
-            times = []
-            for i in range(0, len(impls)):
-                times.append(self.all_results[key].get_stat(impl_ifuncs[i]))
-            disps.append(Displayable(hdr, times, 0))
-        for disp in disps:
-            print(disp.out(), end="")
+
+        for kclass in self.key_classes:
+            disps = []
+            print(self.out_fields(kclass), end=",")
+            first = True
+            ifunc_hdr = []
+            for key in sorted(self.key_order):
+                res = self.all_results[key]
+                if res.kclass != kclass:
+                    continue
+
+                hdr = res.get_hdr(self.fields)
+                times = []
+
+                for i in range(0, len(impls)):
+                    if first:
+                        ifunc_hdr.append(impl_ifuncs[i])
+                    times.append(self.all_results[key].get_stat(
+                        impl_ifuncs[i]))
+                first = False
+                disps.append(Displayable(hdr, times, 0))
+            print(",".join(ifunc_hdr))
+            for disp in disps:
+                print(disp.out(), end="")
 
     def show_results_cmp_other(self, impls, other):
-        disps = []
         print(self.func_hdr())
-        print(self.csv_hdr(other, impls))
-        for key in self.key_order:
-            times = []
-            hdr = self.all_results[key].get_hdr()
+        for kclass in self.key_classes:
+            disps = []
+            print(self.csv_hdr(other, impls, kclass))
+            for key in sorted(self.key_order):
+                times = []
+                res = self.all_results[key]
+                if res.kclass != kclass:
+                    continue
+                hdr = res.get_hdr(self.fields)
 
-            assert key in other.all_results
-            assert other.all_results[key].get_hdr() == hdr
-            assert self.eq_bench_func(other)
-            for impl in impls:
-                times.append(self.all_results[key].get_stat(
-                    self.fmt_ifunc(impl)))
-                times.append(other.all_results[key].get_stat(
-                    other.fmt_ifunc(impl)))
+                assert key in other.all_results
+                assert other.all_results[key].get_hdr(self.fields) == hdr
+                assert self.eq_bench_func(other)
+                for impl in impls:
+                    times.append(self.all_results[key].get_stat(
+                        self.fmt_ifunc(impl)))
+                    times.append(other.all_results[key].get_stat(
+                        other.fmt_ifunc(impl)))
 
-            disps.append(Displayable(hdr, times, -1))
-        for disp in disps:
-            print(disp.out(), end="")
+                disps.append(Displayable(hdr, times, -1))
+            for disp in disps:
+                print(disp.out(), end="")
 
     def show_result_scores(self, impl, others, cmp_s):
-        disps = []
+        assert False, "1"
         print(self.func_hdr())
-        print(self.out_fields())
-        impl = impl[0]
-        for key in self.key_order:
-            times = [self.all_results[key].get_stat(self.fmt_ifunc(impl))]
-            hdr = self.all_results[key].get_hdr()
-            cmp_idx = None
-            if cmp_s in self.file_fmt:
-                cmp_idx = 0
-            for i in range(0, len(others)):
-                other = others[i]
-                if cmp_s in other.file_fmt:
-                    assert cmp_idx is None
-                    cmp_idx = i + 1
+        for kclass in self.key_classes:
+            disps = []
+            print(self.out_fields(kclass))
+            impl = impl[0]
+            for key in sorted(self.key_order):
+                res = self.all_results[key]
+                if res.kclass != kclass:
+                    continue
 
+                times = [res.get_stat(self.fmt_ifunc(impl))]
+                hdr = self.all_results[key].get_hdr(self.fields)
+                cmp_idx = None
+                if cmp_s in self.file_fmt:
+                    cmp_idx = 0
+                for i in range(0, len(others)):
+                    other = others[i]
+                    if cmp_s in other.file_fmt:
+                        assert cmp_idx is None
+                        cmp_idx = i + 1
 
-#                print("{} -> {} [{}]".format(key, other.file_fmt, key in other.all_results))
-                assert key in other.all_results
-                assert other.all_results[key].get_hdr() == hdr
-                assert other.get_bench_func() == self.get_bench_func()
+    #                print("{} -> {} [{}]".format(key, other.file_fmt, key in other.all_results))
+                    assert key in other.all_results
+                    assert other.all_results[key].get_hdr(self.fields) == hdr
+                    assert other.get_bench_func() == self.get_bench_func()
 
-                times.append(other.all_results[key].get_stat(
-                    self.fmt_ifunc(impl)))
-            disps.append(Displayable(hdr, times, cmp_idx))
-        for disp in disps:
-            print(disp.out(), end="")
+                    times.append(other.all_results[key].get_stat(
+                        self.fmt_ifunc(impl)))
+                disps.append(Displayable(hdr, times, cmp_idx))
+            for disp in disps:
+                print(disp.out(), end="")
 
     def show_results_cmp_others(self, impl, others):
-        disps = []
+        assert False, "0"
         print(self.func_hdr())
-        print(self.out_fields())
-        for key in self.key_order:
-            times = [self.all_results[key].get_stat(self.fmt_ifunc(impl))]
+        for kclass in self.key_classes:
+            disps = []
+            print(self.out_fields(kclass))
+            for key in sorted(self.key_order):
+                self.all_results[key]
+                if res.kclass != kclass:
+                    continue
+                times = [res.get_stat(self.fmt_ifunc(impl))]
 
-            hdr = self.all_results[key].get_hdr()
-            for other in others:
-                assert key in other.all_results
-                assert other.all_results[key].get_hdr() == hdr
-                assert other.get_bench_func() == self.get_bench_func()
+                hdr = self.all_results[key].get_hdr(self.fields)
+                for other in others:
+                    assert key in other.all_results
+                    assert other.all_results[key].get_hdr(self.fields) == hdr
+                    assert other.get_bench_func() == self.get_bench_func()
 
-                times.append(other.all_results[key].get_stat(
-                    self.fmt_ifunc(impl)))
+                    times.append(other.all_results[key].get_stat(
+                        self.fmt_ifunc(impl)))
 
-            disps.append(Displayable(hdr, times, None))
-        for disp in disps:
-            print(disp.out(), end="")
+                disps.append(Displayable(hdr, times, None))
+            for disp in disps:
+                print(disp.out(), end="")
+
 
 all_json_files = []
 for i in range(0, len(version_dirs)):

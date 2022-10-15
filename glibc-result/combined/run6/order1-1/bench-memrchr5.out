@@ -1,0 +1,40 @@
+{
+ "timing_type": "hp_timing",
+ "functions": {
+  "memrchr": {
+   "bench-variant": "",
+   "ifuncs": ["simple_memrchr", "__memrchr_evex", "__memrchr_evex_orig", "__memrchr_evex512", "__memrchr_avx2", "__memrchr_sse2"],
+   "results": [
+    {
+     "align": 0,
+     "pos": 32,
+     "len": 2048,
+     "seek_char": 23,
+     "invert_pos": 0,
+     "timings": [1239.06, 38.6547, 38.9863, 23.7647, 44.8745, 94.6512]
+    },
+    {
+     "align": 1,
+     "pos": 64,
+     "len": 256,
+     "seek_char": 23,
+     "invert_pos": 0,
+     "timings": [146.307, 8.54345, 7.71992, 6.41699, 7.68491, 13.646]
+    },
+    {
+     "align": 0,
+     "pos": 32,
+     "len": 2048,
+     "seek_char": 0,
+     "invert_pos": 0,
+     "timings": [1254.69, 39.2603, 39.7072, 23.5528, 47.2769, 91.2268]
+    },
+    {
+     "align": 1,
+     "pos": 64,
+     "len": 256,
+     "seek_char": 0,
+     "invert_pos": 0,
+     "timings": [147.755, 8.57206Timed out: killed the child process
+Termination time: 2022-10-07T20:55:53.913747391
+Last write to standard output: 2022-10-07T20:55:53.910605937

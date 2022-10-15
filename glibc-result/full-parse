@@ -1,4 +1,17 @@
-#! /bin/bash
+#! /usr/bin/env python3
 
-./json-parser.py "$@" | fmt-csv
-./json-parser.py "$@" | fmt-csv | total-gmean
+import sys
+import os
+
+
+def os_cmd(cmd):
+#    print(cmd)
+    os.system(cmd)
+
+
+os.chdir(os.path.dirname(__file__))
+#os_cmd("{}/json-parser.py {}".format(os.getcwd(), " ".join(sys.argv[1:])))
+
+os_cmd("./json-parser.py {} | fmt-csv".format(" ".join(sys.argv[1:])))
+os_cmd("./json-parser.py {} | fmt-csv | total-gmean".format(" ".join(
+    sys.argv[1:])))
