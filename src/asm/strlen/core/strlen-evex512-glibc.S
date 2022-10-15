@@ -19,14 +19,14 @@
 /* UNUSED. Exists purely as reference implementation.  */
 
 #include "../../libc-asm-common.h"
-
+//#define USE_AS_STRNLEN
 #if ISA_SHOULD_BUILD (4)
-
+#define VEC_SIZE 64
 # ifndef STRLEN
 #  define STRLEN	__strlen_evex512
 # endif
 
-# define VEC_SIZE	64
+
 
 
 # ifdef USE_AS_WCSLEN
@@ -76,7 +76,7 @@
 #  define VMOVA	vmovdqa32
 # endif
 # ifndef USE_AS_STRNLEN
-#  define USE_AS_STRNLEN
+//#  define USE_AS_STRNLEN
 # endif
 	.section .text.TEXTSUFFIX, "ax", @progbits
 	/* Aligning entry point to 64 byte, provides better performance

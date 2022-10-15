@@ -54,7 +54,7 @@ FORMATF(2, 3)
 
 static char const *
 concat_args(char const * const * args_begin) {
-    enum { OUTBUF_LEN = 128 };
+    enum { OUTBUF_LEN = 256 };
     static char buf[OUTBUF_LEN];
 
     uint64_t offset = 0, incr;

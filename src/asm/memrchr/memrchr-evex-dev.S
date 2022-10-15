@@ -1,2 +1,3 @@
 #define MEMRCHR	memrchr_evex_dev
-#include "core/memrchr-evex-dev.S"
+#include "../libc-defs/libc-evex-vecs.h"
+#include "core/memrchr-evex-final.S"

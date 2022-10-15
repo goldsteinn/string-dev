@@ -31,6 +31,5 @@
 
 #define VEC_lo  VEC_any_ymm
 
-#include "libc-reg-macros.h"
 
 #endif

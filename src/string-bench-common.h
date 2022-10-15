@@ -96,7 +96,7 @@ rawmemchr_bench_init(bench_info_t const * bench_info) {
     die_assert(_s0);
 
     /*  sz0 -> position of CHAR */
-
+    memset_c(_s0, -1, _sz0 | 4096);
     memset_c(_s0 + _sz0, 0x0, 1);
 }
 
@@ -123,24 +123,23 @@ memchr_bench_init_shared(bench_info_t const * bench_info,
 static void
 memrchr_bench_init(bench_info_t const * bench_info) {
     uint8_t * _s0;
-    uint32_t  _sz0, _sz1;
+    uint32_t  _sz0, _sz1, _align0;
     die_assert(bench_info);
 
     _s0  = bench_info->s0;
     _sz0 = bench_info->sz0;
     _sz1 = bench_info->sz1;
 
-    die_assert(_s0);
+    _align0 = bench_info->align0;
 
+    die_assert(_s0);
     /* sz0 -> len passed
        sz1 -> position of CHAR (backwards) */
-
-    memset_c(_s0, -1, _sz0 | 4096);
+    memset_c(_s0 - _align0, -1, (_sz0 + _align0) | 4096);
     if (_sz1 <= _sz0) {
         memset_c(_s0 + (_sz0 - _sz1), 0x0, 1);
     }
 }
-
 
 
 static void
@@ -214,6 +213,43 @@ memcmp_bench_init(bench_info_t * bench_info) {
     memset_c(_s0 + _sz1, 0x02, 1);
 }
 
+static void
+strchr_bench_init_shared(bench_info_t * bench_info, uint32_t wsize) {
+    uint8_t * _s0;
+    uint32_t  _sz0, _sz1;
+    die_assert(bench_info);
+
+    _s0  = bench_info->s0;
+    _sz0 = bench_info->sz0;
+    _sz1 = bench_info->sz1;
+
+    die_assert(_s0);
+
+    warn_assert(_sz0 != _sz1,
+                "Null term and search CHAR at same position. "
+                "search CHAR will be overwritten.\n");
+
+    memset_c(_s0, -1, _sz0 * wsize);
+    memset_c(_s0 + _sz1 * wsize, 0x01010101, wsize);
+
+    memset_c(_s0 + _sz0 * wsize, 0x0, wsize);
+}
+
+static void
+strchr_bench_init(bench_info_t * bench_info) {
+    strchr_bench_init_shared(bench_info, 1);
+}
+
+static void
+wcschr_bench_init(bench_info_t * bench_info) {
+    strchr_bench_init_shared(bench_info, 4);
+}
+
+static void
+strchrnul_bench_init(bench_info_t * bench_info) {
+    strchr_bench_init_shared(bench_info, 1);
+}
+
 #define memcmpeq_bench_init memcmp_bench_init
 #define wmemcmp_bench_init  empty_bench_init
 #define wcslen_bench_init   empty_bench_init
@@ -247,6 +283,11 @@ wmemchr_bench_init(bench_info_t * bench_info) {
 #define wcslcpy_bench_init empty_bench_init
 #define wcslcat_bench_init empty_bench_init
 
+
+#define strcmp_bench_init  empty_bench_init
+#define strncmp_bench_init empty_bench_init
+#define wcscmp_bench_init  empty_bench_init
+#define wcsncmp_bench_init empty_bench_init
 
 #define memset_bench_init empty_bench_init
 

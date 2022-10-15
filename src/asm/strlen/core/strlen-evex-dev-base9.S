@@ -16,24 +16,29 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 	// #define USE_AS_WCSLEN
-//#define USE_AS_STRNLEN
+	// #define USE_AS_STRNLEN
 #ifndef STRLEN
 # define STRLEN	slen
 #endif
 	// #define USE_AS_STRNLEN
 #ifndef VEC_SIZE
-# include "../../libc-defs/libc-evex-vecs.h"
+# include "../../libc-defs/libc-evex512-vecs.h"
 #endif
 	// #define USE_AS_STRNLEN
 #include "../../libc-asm-common.h"
-
+#include "../../libc-defs/libc-reg-macros.h"
 #if ISA_SHOULD_BUILD (4)
 
 # ifndef STRLEN
 #  error "NO strlen"
 # endif
+
+# ifndef USE_AS_STRNLEN
+//#  define USE_AS_STRNLEN
+//#  define USE_AS_WCSLEN
+# endif
+
 	// # define USE_AS_STRNLEN
-# define LEN_REG	r8
 # ifdef USE_AS_WCSLEN
 #  define VPCMPEQ	vpcmpeqd
 #  define VPCMPNEQ	vpcmpneqd
@@ -53,19 +58,6 @@
 # endif
 # define PAGE_SIZE	4096
 # define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
-
-# if CHAR_PER_VEC == 64
-#  define LEN_REG64	rdx
-#  define LEN_REG32	edx
-#  define LEN_REG_2	sil
-#  define MASK_REG	al
-
-# else
-#  define LEN_REG64	rsi
-#  define LEN_REG32	esi
-#  define LEN_REG_2	esi
-#  define MASK_REG	eax
-# endif
 
 
 # define VEC_RETURN_STMT(sz, end_reg, sub_reg, base_reg, add_stmt, ...)	\
@@ -97,9 +89,7 @@
 # define XZERO	VEC_xmm(0)
 # define VZERO	VEC(0)
 
-# ifndef USE_AS_STRNLEN
-	// #  define USE_AS_STRNLEN
-# endif
+
 
 	.section .text.evex, "ax", @progbits
 ENTRY(STRLEN)
@@ -112,9 +102,6 @@ ENTRY(STRLEN)
 	movl	%esi, %esi
 #  endif
 # endif
-
-
-
 	movl	%edi, %eax
 	vpxorq	%XZERO, %XZERO, %XZERO
 	andl	$(PAGE_SIZE - 1), %eax
@@ -124,31 +111,25 @@ ENTRY(STRLEN)
 	/* Check the first VEC_SIZE bytes.  Each bit in K0 represents a
 	   null byte.  */
 	VPCMPEQ	(%rdi), %VZERO, %k0
-# if V0 && 0
-	Vkmov	%k0, %VGPR(rax)
-	tzcnt	%VGPR(rax), %VGPR(rax)
-	jnc	L(less_1x_vec)
-	cmpq	$CHAR_PER_VEC, %rsi
-	ja	L(aligned_more)
-L(less_1x_vec):
-	cmpq	%rax, %rsi
-	cmovb	%esi, %eax
-# elif defined USE_AS_STRNLEN
-	Vkmov	%k0, %VGPR(rax)
-	movq	%rdi, %rcx
-	test	%VGPR(rax), %VGPR(rax)
-	jz	L(aligned_more)
+# ifdef USE_AS_STRNLEN
+	kmovV	%k0, %VGPR(rcx)
+	movq	%rsi, %rax
+
 	/* If src (rcx) is zero, bsf does not change the result.  */
-	bsf	%VGPR(rax), %VGPR(rax)
+	bsf	%VGPR(rcx), %VGPR(rax)
+	/* If rax > CHAR_PER_VEC then rcx must have been zero (no null
+	   CHAR) and rsi must be > CHAR_PER_VEC.  */
+	cmpq	$CHAR_PER_VEC, %rax
+	ja	L(aligned_more)
+	/* Check if first match in bounds.  */
 	cmpq	%rax, %rsi
 	cmovb	%esi, %eax
 # else
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jz	L(aligned_more)
 	bsf	%VGPR(rax), %VGPR(rax)
 # endif
-
 	ret
 
 # ifdef USE_AS_STRNLEN
@@ -159,39 +140,35 @@ L(max_0):
 	movl	%esi, %eax
 	ret
 #  endif
+
+	/* Aligned more for strnlen compares remaining length vs 2 *
+	   CHAR_PER_VEC, 4 * CHAR_PER_VEC, and 8 * CHAR_PER_VEC before
+	   going to the loop.  */
 	.p2align 4,, 10
 L(aligned_more):
-	cmpq	$CHAR_PER_VEC, %rsi
-	jbe	L(max_0)
-
-
+	movq	%rdi, %rcx
 	andq	$(VEC_SIZE * -1), %rdi
 L(cross_page_continue):
-	/* Check the first 4 * VEC_SIZE.  Only one VEC_SIZE at a time
-	   since data is only aligned to VEC_SIZE.  */
-#  ifdef USE_AS_STRNLEN
-	/* + CHAR_SIZE because it simplies the logic in
-	   last_4x_vec_or_less.  */
-#   ifdef USE_AS_WCSLEN
+	/* Compute number of words checked after aligning.  */
+#  ifdef USE_AS_WCSLEN
+	/* Need to compute directly for wcslen as CHAR_SIZE * rsi can
+	   overflow.  */
 	movq	%rcx, %rdx
 	subq	%rdi, %rdx
 	sarq	$2, %rdx
 	leaq	-(CHAR_PER_VEC * 1)(%rdx, %rsi), %rdx
-#   else
+#  else
 	leaq	-(VEC_SIZE)(%rsi, %rcx), %rdx
 	subq	%rdi, %rdx
-#   endif
 #  endif
 
-
-	/* Adjust length. If near end handle specially.  */
 
 	cmpq	$(CHAR_PER_VEC * 2), %rdx
 	ja	L(more_2x_vec)
 L(last_2x_vec_or_less):
 	VPCMPEQ	VEC_SIZE(%rdi), %VZERO, %k0
-	/* Load first VEC regardless.  */
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
+
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(last_vec_check)
 
@@ -199,10 +176,10 @@ L(last_2x_vec_or_less):
 	subl	$(CHAR_PER_VEC * 1), %edx
 	jbe	L(max_0)
 	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 
 #  if VEC_SIZE == 64
-	.p2align 4,, 3
+	.p2align 4,, 6
 L(last_vec_check):
 	LAST_VEC_CHECK (max_last)
 #  else
@@ -225,31 +202,33 @@ L(last_4x_vec_or_less):
 	jbe	L(last_2x_vec_or_less)
 	.p2align 4,, 6
 L(more_2x_vec):
+	/* Remaining length >= 2 * CHAR_PER_VEC so do VEC0/VEC1 without
+	   rechecking bounds.  */
 	VPCMPEQ	(VEC_SIZE * 1)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x1)
 
 	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x2)
 
 	cmpq	$(CHAR_PER_VEC * 4), %rdx
 	ja	L(more_4x_vec)
 
+
 	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	addl	$(CHAR_PER_VEC * -2), %edx
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(last_vec_check)
 
-	/* Check the end of data.  */
 	subl	$(CHAR_PER_VEC), %edx
 	jbe	L(max_1)
 
 	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 #  if VEC_SIZE != 64
 L(last_vec_check):
 	LAST_VEC_CHECK (max_last)
@@ -268,8 +247,6 @@ L(first_vec_x1):
 L(first_vec_x2):
 	FIRST_VEC_X2 (64)
 #   endif
-
-
 #  endif
 # endif
 
@@ -279,26 +256,22 @@ L(first_vec_x2):
 L(first_vec_x3):
 	subl	$VEC_SIZE, %edi
 # endif
-
 L(first_vec_x4):
 	FIRST_VEC_X4 (32)
 
 # ifndef USE_AS_STRNLEN
-
-
-
 	.p2align 4,, 10
 L(aligned_more):
 	movq	%rdi, %rcx
 	andq	$(VEC_SIZE * -1), %rdi
 L(cross_page_continue):
 	VPCMPEQ	VEC_SIZE(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x1)
 
 	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x2)
 # else
@@ -307,26 +280,28 @@ L(more_4x_vec):
 # endif
 
 	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x3)
 
 	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VZERO, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x4)
 
 
 # ifdef USE_AS_STRNLEN
-	/* Check if at last VEC_SIZE * 4 length.  */
+	/* Check if at last VEC_SIZE * 4 length before aligning for the
+	   loop.  */
 	cmpq	$(CHAR_PER_VEC * 8), %rdx
 	jbe	L(last_4x_vec_or_less)
 
 # endif
 	subq	$(VEC_SIZE * -1), %rdi
-
 	/* Align data to VEC_SIZE * 4.  */
 # if !defined USE_AS_STRNLEN && VEC_SIZE == 64
+	/* No partial register stalls on processors that we use evex512
+	   on and this saves code size.  */
 	xorb	%dil, %dil
 # else
 	andq	$-(VEC_SIZE * 4), %rdi
@@ -334,17 +309,20 @@ L(more_4x_vec):
 
 
 # if defined USE_AS_STRNLEN
+	/* Compute number of words checked after aligning.  */
 #  ifdef USE_AS_WCSLEN
-	/* With wcslen we can't actually compute the end of the obj
-	   safely.  */
+	/* Need to compute directly for wcslen as CHAR_SIZE * rsi can
+	   overflow.  */
 	movq	%rcx, %rdx
 	subq	%rdi, %rdx
 	sarq	$2, %rdx
 	leaq	-(1 + CHAR_PER_VEC * 4)(%rdx, %rsi), %rdx
 #  else
+	/* Leave result off by one so it can be extracted with a 4 *
+	   CHAR_PER_VEC - 1 mask.  */
 	leaq	-(1 + VEC_SIZE * 4)(%rcx, %rsi, CHAR_SIZE), %rdx
 #   if VEC_SIZE == 64
-	/* Save value incase we hit end of maxlen.  */
+	/* Save value for end of maxlen.  */
 	movq	%rdx, %rax
 #   endif
 	andq	$-(VEC_SIZE * 4), %rdx
@@ -352,16 +330,10 @@ L(more_4x_vec):
 # endif
 
 
-
-
-
 	/* Compare 4 * VEC at a time forward.  */
 	.p2align 4
 L(loop_4x_vec):
-	/* Load first VEC regardless.  */
 	VMOVA	(VEC_SIZE * 4)(%rdi), %VEC(1)
-	// VPCMPEQ (VEC_SIZE * 4)(%rdi), %VZERO, %k1
-
 	VPMINU	(VEC_SIZE * 5)(%rdi), %VEC(1), %VEC(2)
 	VMOVA	(VEC_SIZE * 6)(%rdi), %VEC(3)
 	VPMINU	(VEC_SIZE * 7)(%rdi), %VEC(3), %VEC(4)
@@ -377,30 +349,29 @@ L(loop_4x_vec):
 	cmpq	%rdi, %rdx
 	je	L(loop_len_end)
 #  endif
-
 # endif
 
 	subq	$-(VEC_SIZE * 4), %rdi
-	Vkortest %k0, %k2
+	kortestV %k0, %k2
 	jz	L(loop_4x_vec)
 
 	VPTESTN	%VEC(1), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x0)
 
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(last_vec_x1)
 
 	VPTESTN	%VEC(3), %VEC(3), %k0
 
 # if CHAR_PER_VEC == 64
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(first_vec_x2)
 
-	Vkmov	%k2, %VGPR(rax)
+	kmovV	%k2, %VGPR(rax)
 
 	.p2align 4,, 6
 L(first_vec_x3):
@@ -417,7 +388,6 @@ L(first_vec_x2):
 	CHAR_SIZE_SHIFT_REG (rdi)
 	leaq	(CHAR_PER_VEC * 2)(%rdi, %rax), %rax
 	ret
-
 # endif
 
 	.p2align 4,, 10
@@ -430,7 +400,6 @@ L(first_vec_x1):
 # endif
 L(first_vec_x0):
 	FIRST_VEC_X0 (64)
-
 
 # ifndef USE_AS_STRNLEN
 	.p2align 4,, 10
@@ -451,9 +420,9 @@ L(first_vec_x3):
 # endif
 
 # ifdef USE_AS_STRNLEN
+	/* Handle last 4x VEC after loop. All VECs have been loaded.  */
 	.p2align 4,, 10
 L(loop_len_end):
-
 #  if CHAR_PER_VEC == 64
 	movzbl	%al, %edx
 #  else
@@ -463,20 +432,24 @@ L(loop_len_end):
 	andl	$(CHAR_PER_VEC * 4 - 1), %edx
 #  endif
 
-	Vkmov	%k0, %VGPR(rcx)
+	kmovV	%k0, %VGPR(rcx)
 
 #  if CHAR_PER_VEC != 64
 	cmpb	$(CHAR_PER_VEC * 2), %dl
 	jae	L(loop_len_end_more_2x)
 #  else
+	/* Save a bit of code size.  */
 	testb	%dl, %dl
 	js	L(loop_len_end_more_2x)
 #  endif
 
+	/* rcx has matches for first 2x VEC. If its zero we have no
+	   remaining matches.  */
 	test	%VGPR(rcx), %VGPR(rcx)
 	jz	L(max_end_0)
+
 	VPTESTN	%VEC(1), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VGPR(rax)
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(loop_len_end_check)
 
@@ -500,12 +473,12 @@ L(loop_len_end_more_2x):
 	test	%VGPR(rcx), %VGPR(rcx)
 	jnz	L(loop_len_end_1x_or_2x)
 
-	Vkmov	%k2, %VGPR(rcx)
+	kmovV	%k2, %VGPR(rcx)
 	test	%VGPR(rcx), %VGPR(rcx)
 	jz	L(max_end_1)
 
 	VPTESTN	%VEC(3), %VEC(3), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VGPR(rax)
 	addl	$(CHAR_PER_VEC * -2 + 0), %edx
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(loop_len_end_check)
@@ -528,7 +501,7 @@ L(max_end_1):
 	.p2align 4,, 8
 L(loop_len_end_1x_or_2x):
 	VPTESTN	%VEC(1), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VGPR(rax)
 #  if CHAR_PER_VEC == 64
 	test	%VGPR(rax), %VGPR(rax)
 	jnz	L(last_vec_x0)
@@ -541,6 +514,8 @@ L(last_vec_x0):
 	orq	%rcx, %rax
 #  endif
 	bsfq	%rax, %rax
+	/* Since we near end of maxlen, compute result by subtracting
+	   position of null-term from maxlen.  */
 	subq	%rdx, %rsi
 	leaq	-1(%rsi, %rax), %rax
 	ret
@@ -555,9 +530,8 @@ L(cross_page_boundary):
 	andq	$-VEC_SIZE, %rdi
 
 	VPCMPEQ	(%rdi), %VZERO, %k0
-
 # ifdef USE_AS_STRNLEN
-	Vkmov	%k0, %VGPR(r8)
+	kmovV	%k0, %VGPR(r8)
 #  ifdef USE_AS_WCSLEN
 	shrl	$2, %eax
 	andl	$(CHAR_PER_VEC - 1), %eax
@@ -575,7 +549,7 @@ L(cross_page_boundary):
 	cmovb	%esi, %eax
 # else
 
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
 #  ifdef USE_AS_WCSLEN
 	movl	%ecx, %edx
 	shrl	$2, %edx

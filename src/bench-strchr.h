@@ -46,4 +46,6 @@
 
 #define strrchr_make_bench strchr_make_bench
 #define wcsrchr_make_bench strchr_make_bench
+#define strchrnul_make_bench strchr_make_bench
+
 #endif

@@ -20,8 +20,9 @@
 # define MEMCHR	slen
 #endif
 #ifndef VEC_SIZE
-# include "../../libc-defs/libc-evex512-vecs.h"
+# include "../../libc-defs/libc-evex-vecs.h"
 #endif
+
 
 #include "../../libc-asm-common.h"
 #if ISA_SHOULD_BUILD (4)
@@ -31,6 +32,7 @@
 # endif
 
 # ifdef USE_AS_WMEMCHR
+#  define REG_WIDTH	32
 #  define VPTESTN	vptestnmd
 #  define VPBROADCAST	vpbroadcastd
 #  define VPMINU	vpminud
@@ -38,6 +40,7 @@
 #  define VPCMPEQ	vpcmpeqd
 #  define CHAR_SIZE	4
 # else
+#  define REG_WIDTH	VEC_SIZE
 #  define VPTESTN	vptestnmb
 #  define VPBROADCAST	vpbroadcastb
 #  define VPMINU	vpminub
@@ -45,6 +48,8 @@
 #  define VPCMPEQ	vpcmpeqb
 #  define CHAR_SIZE	1
 # endif
+# include "../../libc-defs/libc-reg-macros.h"
+
 # undef USE_AS_RAWMEMCHR
 	/* In the 4x loop the RTM and non-RTM versions have data pointer
 	   off by VEC_SIZE * 4 with RTM version being VEC_SIZE * 4
@@ -53,15 +58,31 @@
 	   compared where the non-RTM version uses vpcmpeq which stores
 	   a bit per byte compared RET_SCALE of CHAR_SIZE is only
 	   relevant for the RTM version.  */
-# undef VZEROUPPER
-# ifdef USE_IN_RTM
+
+# if defined USE_IN_RTM || VEC_SIZE == 64
+#  undef COND_VZEROUPPER
+#  undef VZEROUPPER_RETURN
+#  undef VZEROUPPER
+
+
+#  define COND_VZEROUPPER
+#  define VZEROUPPER_RETURN	ret
 #  define VZEROUPPER
-#  define BASE_OFFSET	(VEC_SIZE * 4)
-#  define RET_SCALE	CHAR_SIZE
+
+#  define USE_TERN_IN_LOOP	0
 # else
-#  define VZEROUPPER	vzeroupper
-#  define BASE_OFFSET	0
-#  define RET_SCALE	1
+#  define USE_TERN_IN_LOOP	1
+# endif
+
+# if USE_TERN_IN_LOOP
+
+#  ifdef USE_AS_WMEMCHR
+#   define TEST_END()	inc %VGPR(rcx)
+#  else
+#   define TEST_END()	add %rdx, %rcx
+#  endif
+# else
+#  define TEST_END()	kortestV %k2, %k3
 # endif
 
 	/* In the return from 4x loop memchr and rawmemchr versions have
@@ -80,9 +101,6 @@
 # define VMATCH	VEC(0)
 # define VMATCH_LO	VEC_lo(0)
 
-# define XMMZERO	VEC_xmm(1)
-# define VZERO	VEC(1)
-
 # ifndef SECTION
 #  define SECTION(p)	p##.evex
 # endif
@@ -95,7 +113,7 @@ ENTRY_P2ALIGN(MEMCHR, 6)
 # ifndef USE_AS_RAWMEMCHR
 	/* Check for zero length.  */
 	test	%RDX_LP, %RDX_LP
-	jz	L(zero)
+	jz	L(zero_0)
 
 #  ifdef __ILP32__
 	/* Clear the upper 32 bits.  */
@@ -107,327 +125,277 @@ ENTRY_P2ALIGN(MEMCHR, 6)
 	movl	%edi, %eax
 	andl	$(PAGE_SIZE - 1), %eax
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
-	ja	L(cross_page_boundary)
+	ja	L(page_cross)
 
 	VPCMPEQ	(%rdi), %VMATCH, %k0
-	Vkmov	%k0, %VGPR(rax)
-
-# ifndef USE_AS_RAWMEMCHR
-	/* If length < CHAR_PER_VEC handle special.  */
-	cmpq	$CHAR_PER_VEC, %rdx
-	jbe	L(first_vec_x0_check)
-# endif
-
-	test	%VGPR(rax), %VGPR(rax)
+	kmovV	%k0, %VGPR(rax)
+	/* This is a hard dependency on RSI to get RAX already so no
+	   worries about false dep on destination.  */
+	tzcnt	%eax, %esi
+	cmpq	%rsi, %rdx
+	jbe	L(zero_0)
+	test	%eax, %eax
 	jz	L(aligned_more)
-L(first_vec_x0):
-	bsf	%VGPR(rax), %VGPR(rax)
-# ifdef USE_AS_WMEMCHR
-	/* NB: Multiply bytes by CHAR_SIZE to get the wchar_t count.  */
-	leaq	(%rdi, %rax, CHAR_SIZE), %rax
-# else
-	addq	%rdi, %rax
-# endif
+	leaq	(%rdi, %rsi), %rax
 	ret
-
-# ifndef USE_AS_RAWMEMCHR
-L(zero):
+L(zero_0):
 	xorl	%eax, %eax
 	ret
-
-	.p2align 4
-L(first_vec_x0_check):
-	/* Check if first match was before length. NB: tzcnt has false
-	   data- dependency on destination. eax already had a data-
-	   dependency on esi so this should have no affect here.  */
-	tzcnt	%VGPR(rax), %VGPR(rax)
-#  ifdef USE_AS_WMEMCHR
-	leaq	(%rdi, %rsi, CHAR_SIZE), %rdi
-#  else
-	addq	%rsi, %rdi
-#  endif
-	xorl	%eax, %eax
-	cmpl	%esi, %edx
-	cmovg	%rdi, %rax
-	ret
-# endif
 
 L(aligned_more):
-# ifndef USE_AS_RAWMEMCHR
-	addq	%rdi, %rdx
-	movq	%rdx, %rcx
-# endif
-	orq	$(VEC_SIZE - 1), %rdi
-	incq	%rdi
-# ifndef USE_AS_RAWMEMCHR
-	subq	%rdi, %rdx
-# endif
-L(last_4x_vec_or_less):
+	leaq	-(VEC_SIZE + 1)(%rdx, %rdi), %rax
+	andq	$(VEC_SIZE * -1), %rdi
+	subq	%rdi, %rax
 
-	VPCMPEQ	(VEC_SIZE * 0)(%rdi), %VMATCH, %k0
-	Vkmov	%k0, %VGPR(rax)
+	VPCMPEQ	VEC_SIZE(%rdi), %VMATCH, %k0
+	kmovV	%k0, %VGPR(rcx)
 
-	cmpq	$(CHAR_PER_VEC * 2), %rdx
+	/* We cannot fold the above `sub %rdi, %rax` with the `cmp
+	   $(CHAR_PER_VEC * 2), %rax` because its possible for a very
+	   large length to overflow and cause the subtract to carry
+	   despite length being above CHAR_PER_VEC * 2.  */
+	cmpq	$(CHAR_PER_VEC * 2 - 1), %rax
 	ja	L(more_2x_vec)
-L(last_2x_vec_or_less):
-	test	%VGPR(rax), %VGPR(rax)
-	jnz	L(last_vec_x0_check)
+L(last_2x_vec):
+	test	%VGPR(rcx), %VGPR(rcx)
+	jnz	L(first_vec_x1_check)
 
 	/* Check the end of data.  */
-	subl	$CHAR_PER_VEC, %edx
-	jbe	L(zero)
-
-	VPCMPEQ	(VEC_SIZE * 1)(%rdi), %VMATCH, %k0
-	Vkmov	%k0, %VGPR(rax)
-L(last_vec_x0_check):
-	tzcnt	%VGPR(rax), %VGPR(rax)
-	subq	%rdx, %rax
-	jae	L(zero)
-	addq	%rcx, %rax
+	subl	$(CHAR_PER_VEC * 1 - 1), %eax
+	jbe	L(zero_0)
+	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VMATCH, %k0
+	kmovV	%k0, %VGPR(rcx)
+	tzcnt	%VGPR(rcx), %VGPR(rcx)
+	cmp	%cl, %al
+	jbe	L(zero_0)
+L(first_vec_x2_ret):
+	leaq	(VEC_SIZE * 2)(%rdi, %rcx, CHAR_SIZE), %rax
 	ret
-# if (defined USE_IN_RTM) || VEC_SIZE == 64
-L(last_vec_x1):
-# endif
+
+	.p2align 4,, 8
+L(first_vec_x1_check):
+	bsf	%VGPR(rcx), %VGPR(rcx)
+	cmpb	%cl, %al
+	jae	L(first_vec_x1_ret)
+	xorl	%eax, %eax
+	ret
+
+	.p2align 4,, 6
+L(first_vec_x2):
+	addq	$VEC_SIZE, %rdi
 L(first_vec_x1):
-	bsf	%VGPR(rax), %VGPR(rax)
-	leaq	(VEC_SIZE)(%rdi, %rax, CHAR_SIZE), %rax
+	bsf	%VGPR(rcx), %VGPR(rcx)
+L(first_vec_x1_ret):
+	leaq	(VEC_SIZE * 1)(%rdi, %rcx, CHAR_SIZE), %rax
 	ret
 
-
-	.p2align 4,, 10
-L(last_4x_vec_or_less_3):
-	COND_VZEROUPPER
-L(last_4x_vec_or_less_2):
-	subl	$(CHAR_PER_VEC * -4), %esi
-	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VMATCH, %k0
-	subq	$(VEC_SIZE * -4), %rdi
-	Vkmov	%k0, %VGPR(rax)
-
-
-	cmpl	$(CHAR_PER_VEC * 2), %esi
-	jbe	L(last_2x_vec_or_less)
-
-	.p2align 4,, 4
+	.p2align 4,, 6
+L(loop_4x_end):
+	addq	$-(VEC_SIZE), %rdi
+    subl	$-(CHAR_PER_VEC * 4), %eax
+L(last_4x_vec):
+    decl    %eax
+	VPCMPEQ	(VEC_SIZE * 5)(%rdi), %VMATCH, %k0
+	subq	$-(VEC_SIZE * 4), %rdi
+	kmovV	%k0, %VGPR(rcx)
+	cmpb	$(CHAR_PER_VEC * 2 - 1), %al
+	jbe	L(last_2x_vec)
+	.p2align 4,, 6
 L(more_2x_vec):
-	test	%VGPR(rax), %VGPR(rax)
-	jnz	L(first_vec_x0_2)
-
-	VPCMPEQ	(VEC_SIZE * 1)(%rdi), %VMATCH, %k0
-	Vkmov	%k0, %VGPR(rax)
-	test	%VGPR(rax), %VGPR(rax)
+	test	%VGPR(rcx), %VGPR(rcx)
 	jnz	L(first_vec_x1)
 
 	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VMATCH, %k0
-	Vkmov	%k0, %VGPR(rax)
-	cmpq	$(CHAR_PER_VEC * 4), %rdx
+	kmovV	%k0, %VGPR(rcx)
+
+	test	%VGPR(rcx), %VGPR(rcx)
+	jnz	L(first_vec_x2)
+
+	subq	$(CHAR_PER_VEC * 4 - 1), %rax
 	ja	L(more_4x_vec)
 
-
-	test	%VGPR(rax), %VGPR(rax)
-	jnz	L(first_vec_x2_check)
-
-	subq	$(CHAR_PER_VEC * 3), %rdx
-	jbe	L(zero)
 	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VMATCH, %k0
-	Vkmov	%k0, %VGPR(rax)
-	tzcnt	%VGPR(rax), %VGPR(rax)
-	subq	%rdx, %rax
-	jae	L(zero_2)
-	addq	%rcx, %rax
-	ret
-# if 1
+	kmovV	%k0, %VGPR(rcx)
+	test	%VGPR(rcx), %VGPR(rcx)
+	jnz	L(first_vec_x3_check)
 
+	addl	$(CHAR_PER_VEC * 1), %eax
+	jle	L(zero_2)
+
+	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VMATCH, %k0
+	kmovV	%k0, %VGPR(rcx)
+	tzcnt	%VGPR(rcx), %VGPR(rcx)
+	cmp	%cl, %al
+	ja	L(first_vec_x4_ret)
 L(zero_2):
 	xorl	%eax, %eax
 	ret
-#  if (defined USE_IN_RTM) || VEC_SIZE == 64
-L(last_vec_x0):
-#  endif
-L(first_vec_x0_2):
-	bsf	%VGPR(rax), %VGPR(rax)
-#  ifdef USE_AS_WMEMCHR
-	/* NB: Multiply bytes by CHAR_SIZE to get the wchar_t count.  */
-	leaq	(%rdi, %rax, CHAR_SIZE), %rax
-#  else
-	addq	%rdi, %rax
-#  endif
-	ret
-# endif
 
-
-	.p2align 4,, 10
-L(first_vec_x2_check):
-	bsf	%VGPR(rax), %VGPR(rax)
-	subl	$(CHAR_PER_VEC * -2), %edx
-	cmpl	%eax, %edx
-	jbe	L(zero_2)
-	leaq	(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %rax
+	.p2align 4,, 4
+L(first_vec_x4):
+	bsf	%VGPR(rcx), %VGPR(rcx)
+L(first_vec_x4_ret):
+	leaq	(VEC_SIZE * 4)(%rdi, %rcx, CHAR_SIZE), %rax
 	ret
 
+	.p2align 4,, 6
+L(first_vec_x3_check):
+	subl	$-(CHAR_PER_VEC * 2), %eax
+	bsf	%VGPR(rcx), %VGPR(rcx)
+	cmpb	%cl, %al
+	ja	L(first_vec_x3_ret)
+	xorl	%eax, %eax
+	ret
+
+	.p2align 4,, 4
 L(first_vec_x3):
-	addq	$VEC_SIZE, %rdi
-# if (defined USE_IN_RTM) || VEC_SIZE == 64
-L(last_vec_x2):
-# endif
-L(first_vec_x2):
-	bsf	%VGPR(rax), %VGPR(rax)
-	leaq	(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %rax
+	bsf	%VGPR(rcx), %VGPR(rcx)
+L(first_vec_x3_ret):
+	leaq	(VEC_SIZE * 3)(%rdi, %rcx, CHAR_SIZE), %rax
 	ret
 
-	.p2align 4,, 10
-L(more_4x_vec):
-	test	%VGPR(rax), %VGPR(rax)
-	jnz	L(first_vec_x2)
+	.p2align 4,, 6
+L(loop_last_4x_vec):
+	jmp	L(loop_4x_end)
 
+	.p2align 4,, 12
+L(more_4x_vec):
 	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VMATCH, %k0
-	Vkmov	%k0, %VGPR(rax)
+	kmovV	%k0, %VGPR(rcx)
+	test	%VGPR(rcx), %VGPR(rcx)
 	jnz	L(first_vec_x3)
 
-	subq	$(CHAR_PER_VEC * 8), %rdx
-	jbe	L(last_4x_vec_or_less_2)
+	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VMATCH, %k0
+	kmovV	%k0, %VGPR(rcx)
+	test	%VGPR(rcx), %VGPR(rcx)
+	jnz	L(first_vec_x4)
 
+	cmpq	$(VEC_SIZE * 4), %rax
+	jbe	L(last_4x_vec)
 
-# if VEC_SIZE == 64
-	/* evex512 machines having merging uop and no partial register
-	   stalls.  */
-	xorb	%dil, %dil
-# else
+    
+	addq	$VEC_SIZE, %rdi
+	addq	%rdi, %rax
 	andq	$-(VEC_SIZE * 4), %rdi
-# endif
+	subq	%rdi, %rax
 
-# ifdef USE_AS_MEMCHR
-	movq	%rcx, %rdx
-	subq	%rdi, %rdx
-# endif
-
-# if !(defined USE_IN_RTM || VEC_SIZE == 64)
-	/* copy ymmmatch to ymm0 so we can use vpcmpeq which is not
-	   encodable with EVEX registers (ymm16-ymm31).  */
+# if USE_TERN_IN_LOOP
 	vmovdqa64 %VMATCH, %VMATCH_LO
 # endif
 	.p2align 4
 L(loop_4x_vec):
-	subq	$(CHAR_PER_VEC * 4), %rdx
-	jbe	L(last_4x_vec_or_less_3)
+	subq	$(CHAR_PER_VEC * 4), %rax
+	jbe	L(loop_last_4x_vec)
 
-# if defined USE_IN_RTM || VEC_SIZE == 64
-	/* It would be possible to save some instructions using 4x VPCMP
-	   but bottleneck on port 5 makes it not woth it.  */
+
+# if USE_TERN_IN_LOOP
+#  ifdef USE_AS_WMEMCHR
 	VPCMP	$4, (VEC_SIZE * 4)(%rdi), %VMATCH, %k1
-	/* xor will set bytes match esi to zero.  */
-	vpxorq	(VEC_SIZE * 5)(%rdi), %VMATCH, %VEC(2)
-	vpxorq	(VEC_SIZE * 6)(%rdi), %VMATCH, %VEC(3)
-	VPCMP	$0, (VEC_SIZE * 7)(%rdi), %VMATCH, %k3
-	/* Reduce VEC2 / VEC3 with min and VEC1 with zero mask.  */
-	VPMINU	%VEC(2), %VEC(3), %VEC(3){%k1}{z}
-	VPTESTN	%VEC(3), %VEC(3), %k2
-# else
-#  ifdef USE_AS_WMEMCHR
-	/* vptern can only accept masks for epi32/epi64 so can only save
-	   instruction using not equals mask on vptern with wmemchr.
-	 */
-	VPCMP	$4, (%rdi), %VMATCH, %k1
 #  else
-	VPCMPEQ	(%rdi), %VMATCH, %k1
+	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VMATCH, %k1
 #  endif
-	VPCMPEQ	VEC_SIZE(%rdi), %VMATCH_LO, %VEC_lo(2)
-	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VMATCH_LO, %VEC_lo(3)
-	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VMATCH_LO, %VEC_lo(4)
-
+	VPCMPEQ	(VEC_SIZE * 5)(%rdi), %VMATCH_LO, %VEC_lo(2)
+	VPCMPEQ	(VEC_SIZE * 6)(%rdi), %VMATCH_LO, %VEC_lo(3)
+	VPCMPEQ	(VEC_SIZE * 7)(%rdi), %VMATCH_LO, %VEC_lo(4)
 #  ifdef USE_AS_WMEMCHR
-	/* This takes the not of or between ymm2, ymm3, ymm4 as well as
-	   combines result from VEC0 with zero mask.  */
 	vpternlogd $1, %VEC_lo(2), %VEC_lo(3), %VEC_lo(4){%k1}{z}
 	vpmovmskb %VEC_lo(4), %VGPR(rcx)
 #  else
-	/* 254 is mask for oring VEC_lo(2), VEC_lo(3), VEC_lo(4) into
-	   VEC_lo(4).  */
+	/* 254 is mask for oring ymm2, ymm3, ymm4 into ymm4.  */
 	vpternlogd $254, %VEC_lo(2), %VEC_lo(3), %VEC_lo(4)
 	vpmovmskb %VEC_lo(4), %VGPR(rcx)
-	kmovd	%k1, %VGPR(rax)
+	kmovd	%k1, %edx
 #  endif
-# endif
 
-	subq	$-(VEC_SIZE * 4), %rdi
-# if defined USE_IN_RTM || VEC_SIZE == 64
-	kortestd %k2, %k3
 # else
-#  ifdef USE_AS_WMEMCHR
-	/* ecx contains not of matches. All 1s means no matches. incl
-	   will overflow and set zeroflag if that is the case.  */
-	inc	%VGPR(rcx)
-#  else
-	/* If either VEC1 (eax) or VEC2-VEC4 (ecx) are not zero. Adding
-	   to ecx is not an issue because if eax is non-zero it will be
-	   used for returning the match. If it is zero the add does
-	   nothing.  */
-	addq	%rax, %rcx
-#  endif
+	VPCMP	$4, (VEC_SIZE * 4)(%rdi), %VMATCH, %k1
+	vpxorq	(VEC_SIZE * 5)(%rdi), %VMATCH, %VEC(2)
+	vpxorq	(VEC_SIZE * 6)(%rdi), %VMATCH, %VEC(3)
+	VPCMPEQ	(VEC_SIZE * 7)(%rdi), %VMATCH, %k3
+	VPMINU	%VEC(2), %VEC(3), %VEC(3){%k1}{z}
+	VPTESTN	%VEC(3), %VEC(3), %k2
+	kmovV	%k2, %VGPR(rcx)
 # endif
+	subq	$-(VEC_SIZE * 4), %rdi
+
+	TEST_END ()
 	jz	L(loop_4x_vec)
 
+L(loop_vec_ret):
 
-# if defined USE_IN_RTM || defined USE_AS_WMEMCHR || VEC_SIZE == 64
-	/* k1 has not of matches with VEC1.  */
-	Vkmov	%k1, %VGPR(rax)
-#  ifdef USE_AS_WMEMCHR
-	subl	$((1 << CHAR_PER_VEC)- 1), %VGPR(rax)
-#  else
-	inc	%VGPR(rax)
-#  endif
+# if defined USE_AS_WMEMCHR || !USE_TERN_IN_LOOP
+	kmovV	%k1, %VGPR(rdx)
+	inc	%VGPR(rdx)
 # else
-	/* eax already has matches for VEC1.  */
-	testl	%VGPR(rax), %VGPR(rax)
+	test	%VGPR(rdx), %VGPR(rdx)
 # endif
-	jnz	L(last_vec_x0)
-
-# if defined USE_IN_RTM || VEC_SIZE == 64
-	VPTESTN	%VEC(2), %VEC(2), %k0
-	Vkmov	%k0, %VGPR(rax)
-# else
-	vpmovmskb %VEC_lo(2), %eax
-# endif
-	testl	%eax, %eax
 	jnz	L(last_vec_x1)
 
-# if defined USE_IN_RTM || VEC_SIZE == 64
-	VPTESTN	%VEC(3), %VEC(3), %k0
-	Vkmov	%k0, %VGPR(rax)
-	testl	%eax, %eax
+# if USE_TERN_IN_LOOP
+	vpmovmskb %VEC_lo(2), %VGPR(rdx)
+# else
+	VPTESTN	%VEC(2), %VEC(2), %k1
+	kmovV	%k1, %VGPR(rdx)
+# endif
+	test	%VGPR(rdx), %VGPR(rdx)
 	jnz	L(last_vec_x2)
 
-	Vkmov	%k3, %VGPR(rax)
-	bsf	%VGPR(rax), %VGPR(rax)
-	leaq	(VEC_SIZE * 3 + RET_OFFSET)(%rdi, %rax, CHAR_SIZE), %rax
-	ret
+
+# if USE_TERN_IN_LOOP
+	vpmovmskb %VEC_lo(3), %VGPR(rdx)
 # else
-	vpmovmskb %VEC_lo(3), %eax
-	salq	$VEC_SIZE, %rcx
-	orq	%rcx, %rax
-	bsfq	%rax, %rax
-	leaq	(VEC_SIZE * 2 + RET_OFFSET)(%rdi, %rax), %rax
-L(return_vzeroupper):
-	ZERO_UPPER_VEC_REGISTERS_RETURN
-
-
-L(last_vec_x0):
-	bsf	%VGPR(rax), %VGPR(rax)
-	leaq	-(VEC_SIZE * 4)(%rdi, %rax, CHAR_SIZE), %rax
-	VZEROUPPER_RETURN
-
-L(last_vec_x1):
-	bsf	%VGPR(rax), %VGPR(rax)
-	leaq	-(VEC_SIZE * 3)(%rdi, %rax, CHAR_SIZE), %rax
-	VZEROUPPER_RETURN
-
-L(last_vec_x2):
-	bsf	%VGPR(rax), %VGPR(rax)
-	leaq	-(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %rax
-	VZEROUPPER_RETURN
+	kmovV	%k2, %VGPR(rdx)
 # endif
 
-L(cross_page_boundary):
+	COND_VZEROUPPER
+
+# if CHAR_PER_VEC == 64
+	test	%VGPR(rdx), %VGPR(rdx)
+	jnz	L(last_vec_x3)
+
+#  if USE_TERN_IN_LOOP
+#   error "Unsupported"
+#  endif
+
+	kmovV	%k3, %VGPR(rcx)
+# else
+
+#  if !USE_TERN_IN_LOOP
+	kmovV	%k3, %VGPR(rcx)
+#  endif
+	salq	$CHAR_PER_VEC, %rcx
+	addq	%rdx, %rcx
+# endif
+	bsf	%rcx, %rcx
+	leaq	(VEC_SIZE * 2)(%rdi, %rcx), %rax
+	ret
+
+L(last_vec_x1):
+	bsf	%VGPR(rdx), %VGPR(rdx)
+	leaq	(VEC_SIZE * 0)(%rdi, %rdx), %rax
+	VZEROUPPER_RETURN
+
+
+# if CHAR_PER_VEC == 64
+L(last_vec_x3):
+	addq	$VEC_SIZE, %rdi
+# endif
+L(last_vec_x2):
+	bsf	%VGPR(rdx), %VGPR(rdx)
+	leaq	(VEC_SIZE * 1)(%rdi, %rdx), %rax
+	VZEROUPPER_RETURN
+
+
+L(zero_end_0):
+	xorl	%eax, %eax
+	VZEROUPPER_RETURN
+L(page_cross):
+
+
+
+	// L(page_cross):
 	ud2
+	.p2align 4,, 4
 
 END(MEMCHR)
 #endif

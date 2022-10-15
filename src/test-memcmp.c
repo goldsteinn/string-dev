@@ -107,7 +107,7 @@ check_wmemcmp(int          res,
 #define FAILURE_MSG                                                            \
     "%u, %u, %u, %u (%u: %lu, %lu)\n", i, j, k, l, al_offset,                  \
         al_pairs[S1_IDX(l)], al_pairs[S2_IDX(l)]
-int
+static int
 test_memcmp_kernel(void const * test_f,
                    FUNC_T(check_memcmp) check_f,
                    uint32_t test_size) {

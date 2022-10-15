@@ -34,41 +34,41 @@
 	// # include <sysdep.h>
 
 # ifndef MEMCMPEQ
-#  define MEMCMPEQ			__memcmpeq_evex
+#  define MEMCMPEQ	__memcmpeq_evex
 # endif
 
 # ifndef VEC_SIZE
 #  include "../../libc-defs/libc-evex-vecs.h"
 # endif
-
+# include "../../libc-defs/libc-reg-macros.h"
 # if VEC_SIZE == 32
-#  define S1_ACCESS_END			%rsi, %rdx
-#  define CMP_END				cmpl
-#  define CMP_END_OFFSET			0
+#  define S1_ACCESS_END	%rsi, %rdx
+#  define CMP_END	cmpl
+#  define CMP_END_OFFSET	0
 
-#  define TEST_ZERO(reg)			test %VGPR(reg), %VGPR(reg)
+#  define TEST_ZERO(reg)	test %VGPR(reg), %VGPR(reg)
 #  define TO_32BIT_P1(reg)	/* Do nothing. */
 #  define TO_32BIT_P2(reg)	/* Do nothing. */
 #  define TO_32BIT(reg)	/* Do nothing. */
 # elif VEC_SIZE == 64
-#  define S1_ACCESS_END			%rsi
-#  define CMP_END				subl
-#  define CMP_END_OFFSET			(VEC_SIZE * -3)
+#  define S1_ACCESS_END	%rsi
+#  define CMP_END	subl
+#  define CMP_END_OFFSET	(VEC_SIZE * -3)
 
-#  define TEST_ZERO(reg)			neg %VGPR(reg)
-#  define TO_32BIT_P1(reg)		TEST_ZERO(reg)
-#  define TO_32BIT_P2(reg)		sbb %VGPR_SZ(reg, 32), %VGPR_SZ(reg, 32)
-#  define TO_32BIT(reg)			popcntq %reg, %reg
+#  define TEST_ZERO(reg)	neg %VGPR(reg)
+#  define TO_32BIT_P1(reg)	TEST_ZERO(reg)
+#  define TO_32BIT_P2(reg)	sbb %VGPR_SZ(reg, 32), %VGPR_SZ(reg, 32)
+#  define TO_32BIT(reg)	popcntq %reg, %reg
 # else
 #  error "Unsupported VEC_SIZE"
 # endif
 
 
-# define VMOVU_MASK			vmovdqu8
-# define VPCMP				vpcmpub
-# define VPTEST				vptestmb
+# define VMOVU_MASK	vmovdqu8
+# define VPCMP	vpcmpub
+# define VPTEST	vptestmb
 
-# define PAGE_SIZE			4096
+# define PAGE_SIZE	4096
 
 
 	.section .text.evex, "ax", @progbits
@@ -84,23 +84,23 @@ ENTRY_P2ALIGN(MEMCMPEQ, 6)
 	/* Create mask of bytes that are guranteed to be valid because
 	   of length (edx). Using masked movs allows us to skip checks
 	   for page crosses/zero size.  */
-	mov	$-1, %VGPR(rcx)
-	bzhi	%VGPR(rdx), %VGPR(rcx), %VGPR(rcx)
-	Vkmov	%VGPR(rcx), %k2
+	mov	$-1, %VRCX
+	bzhi	%VRDX, %VRCX, %VRCX
+	kmovV	%VRCX, %k2
 
 	/* Use masked loads as VEC_SIZE could page cross where length
 	   (edx) would not.  */
 	VMOVU_MASK (%rsi), %VEC(2){%k2}
 	VPCMP	$4, (%rdi), %VEC(2), %k1{%k2}
-	Vkmov	%k1, %VGPR(rax)
-	TO_32BIT (VGPR(rax))
+	kmovV	%k1, %VRAX
+	TO_32BIT (VRAX)
 	ret
 
 
 L(last_1x_vec):
 	VMOVU	-(VEC_SIZE * 1)(%rsi, %rdx), %VEC(1)
 	VPCMP	$4, -(VEC_SIZE * 1)(%rdi, %rdx), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VRAX
 	TO_32BIT_P1 (rax)
 L(return_neq0):
 	TO_32BIT_P2 (rax)
@@ -112,7 +112,7 @@ L(more_1x_vec):
 	VMOVU	(%rsi), %VEC(1)
 	/* Use compare not equals to directly check for mismatch.  */
 	VPCMP	$4, (%rdi), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VRAX
 	TEST_ZERO (rax)
 	jnz	L(return_neq0)
 
@@ -122,7 +122,7 @@ L(more_1x_vec):
 	/* Check second VEC no matter what.  */
 	VMOVU	VEC_SIZE(%rsi), %VEC(2)
 	VPCMP	$4, VEC_SIZE(%rdi), %VEC(2), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VRAX
 	TEST_ZERO (rax)
 	jnz	L(return_neq0)
 
@@ -133,13 +133,13 @@ L(more_1x_vec):
 	/* Check third and fourth VEC no matter what.  */
 	VMOVU	(VEC_SIZE * 2)(%rsi), %VEC(3)
 	VPCMP	$4, (VEC_SIZE * 2)(%rdi), %VEC(3), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VRAX
 	TEST_ZERO (rax)
 	jnz	L(return_neq0)
 
 	VMOVU	(VEC_SIZE * 3)(%rsi), %VEC(4)
 	VPCMP	$4, (VEC_SIZE * 3)(%rdi), %VEC(4), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VRAX
 	TEST_ZERO (rax)
 	jnz	L(return_neq0)
 
@@ -175,8 +175,8 @@ L(more_1x_vec):
 
 	/* Compare VEC(4) with 0. If any 1s s1 and s2 don't match.  */
 	VPTEST	%VEC(4), %VEC(4), %k1
-	Vkmov	%k1, %VGPR(rax)
-	TO_32BIT (VGPR(rax))
+	kmovV	%k1, %VRAX
+	TO_32BIT (VRAX)
 	ret
 # if VEC_SIZE == 32
 	.p2align 4
@@ -207,7 +207,7 @@ L(loop_4x_vec):
 
 	vpternlogd $0xfe, %VEC(2), %VEC(3), %VEC(4)
 	VPTEST	%VEC(4), %VEC(4), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VRAX
 	TEST_ZERO (rax)
 	jnz	L(return_neq2)
 	subq	$-(VEC_SIZE * 4), %rdi
@@ -224,14 +224,14 @@ L(loop_4x_vec):
 	vpxorq	(VEC_SIZE * 3)(%rdx), %VEC(4), %VEC(4)
 	/* rdi has 4 * VEC_SIZE - remaining length.  */
 	CMP_END	$(VEC_SIZE * 3), %edi
-	jae	L(8x_last_1x_vec)
+	jge	L(8x_last_1x_vec)
 	/* Load regardless of branch.  */
 	VMOVU	(VEC_SIZE * 2)(S1_ACCESS_END), %VEC(3)
 	/* Ternary logic to xor (VEC_SIZE * 2)(%rdx) with VEC(3) while
 	   oring with VEC(4). Result is stored in VEC(4).  */
 	vpternlogd $0xf6, (VEC_SIZE * 2)(%rdx), %VEC(3), %VEC(4)
 	cmpl	$(VEC_SIZE * 2 + CMP_END_OFFSET), %edi
-	jae	L(8x_last_2x_vec)
+	jge	L(8x_last_2x_vec)
 
 	VMOVU	VEC_SIZE(S1_ACCESS_END), %VEC(2)
 	vpxorq	VEC_SIZE(%rdx), %VEC(2), %VEC(2)
@@ -243,7 +243,7 @@ L(loop_4x_vec):
 L(8x_last_1x_vec):
 L(8x_last_2x_vec):
 	VPTEST	%VEC(4), %VEC(4), %k1
-	Vkmov	%k1, %VGPR(rax)
+	kmovV	%k1, %VRAX
 	TO_32BIT_P1 (rax)
 L(return_neq2):
 	TO_32BIT_P2 (rax)
@@ -256,10 +256,9 @@ L(last_2x_vec):
 	VMOVU	-(VEC_SIZE * 1)(%rsi, %rdx), %VEC(2)
 	vpternlogd $0xde, -(VEC_SIZE * 1)(%rdi, %rdx), %VEC(1), %VEC(2)
 	VPTEST	%VEC(2), %VEC(2), %k1
-	Vkmov	%k1, %VGPR(rax)
-	TO_32BIT (VGPR(rax))
+	kmovV	%k1, %VRAX
+	TO_32BIT (VRAX)
 	ret
-
 	/* evex256: 1 Bytes from next cache line. evex512: 15 Bytes from
 	   next cache line.  */
 END(MEMCMPEQ)

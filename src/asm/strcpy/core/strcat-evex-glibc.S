@@ -20,25 +20,25 @@
 #if IS_IN (libc)
 
 # ifndef STRCAT
-#  define STRCAT  __strcat_evex
+#  define STRCAT	__strcat_evex
 # endif
 
-# define VMOVU		vmovdqu64
-# define VMOVA		vmovdqa64
+# define VMOVU	vmovdqu64
+# define VMOVA	vmovdqa64
 
-/* zero register */
+	/* zero register.  */
 # define XMMZERO	xmm16
 # define YMMZERO	ymm16
-# define YMM0		ymm17
-# define YMM1		ymm18
+# define YMM0	ymm17
+# define YMM1	ymm18
 
 # define USE_AS_STRCAT
 
-/* Number of bytes in a vector register */
+	/* Number of bytes in a vector register.  */
 # define VEC_SIZE	32
 
-	.section .text.evex,"ax",@progbits
-ENTRY (STRCAT)
+	.section .text.evex, "ax", @progbits
+ENTRY(STRCAT)
 	mov	%rdi, %r9
 # ifdef USE_AS_STRNCAT
 	mov	%rdx, %r8
@@ -46,7 +46,7 @@ ENTRY (STRCAT)
 
 	xor	%eax, %eax
 	mov	%edi, %ecx
-	and	$((VEC_SIZE * 4) - 1), %ecx
+	and	$((VEC_SIZE * 4)- 1), %ecx
 	vpxorq	%XMMZERO, %XMMZERO, %XMMZERO
 	cmp	$(VEC_SIZE * 3), %ecx
 	ja	L(fourth_vector_boundary)
@@ -152,7 +152,7 @@ L(align_vec_size_start):
 	test	%edx, %edx
 	jnz	L(exit_null_on_fifth_vector)
 
-	test	$((VEC_SIZE * 4) - 1), %rax
+	test	$((VEC_SIZE * 4)- 1), %rax
 	jz	L(align_four_vec_loop)
 
 	vpcmpb	$0, (VEC_SIZE * 5)(%rax), %YMMZERO, %k4
@@ -161,7 +161,7 @@ L(align_vec_size_start):
 	test	%edx, %edx
 	jnz	L(exit)
 
-	test	$((VEC_SIZE * 4) - 1), %rax
+	test	$((VEC_SIZE * 4)- 1), %rax
 	jz	L(align_four_vec_loop)
 
 	vpcmpb	$0, VEC_SIZE(%rax), %YMMZERO, %k0
@@ -170,7 +170,7 @@ L(align_vec_size_start):
 	test	%edx, %edx
 	jnz	L(exit)
 
-	test	$((VEC_SIZE * 4) - 1), %rax
+	test	$((VEC_SIZE * 4)- 1), %rax
 	jz	L(align_four_vec_loop)
 
 	vpcmpb	$0, VEC_SIZE(%rax), %YMMZERO, %k0
@@ -179,7 +179,7 @@ L(align_vec_size_start):
 	test	%edx, %edx
 	jnz	L(exit)
 
-	test	$((VEC_SIZE * 4) - 1), %rax
+	test	$((VEC_SIZE * 4)- 1), %rax
 	jz	L(align_four_vec_loop)
 
 	vpcmpb	$0, VEC_SIZE(%rax), %YMMZERO, %k1
@@ -270,7 +270,7 @@ L(exit_null_on_fifth_vector):
 L(StartStrcpyPart):
 	lea	(%r9, %rax), %rdi
 	mov	%rsi, %rcx
-	mov	%r9, %rax      /* save result */
+	mov	%r9, %rax	/* save result */
 
 # ifdef USE_AS_STRNCAT
 	test	%r8, %r8

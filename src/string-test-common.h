@@ -13,9 +13,19 @@ static uint32_t const nalignments = sizeof(alignments) / sizeof(alignments[0]);
 static uint32_t const align_max   = alignments[nalignments - 1];
 
 static uint32_t
+next_v2(uint32_t cur_val, uint32_t outer_val, uint32_t wsize) {
+    uint32_t dif = MAX(cur_val, outer_val) - MIN(cur_val, outer_val);
+    if(dif < 161) {
+        return cur_val + wsize;
+    }
+    return cur_val + 28;
+
+}
+
+static uint32_t
 next_v(uint32_t cur_val, uint32_t test_size) {
     uint32_t ub        = cur_val & 4096;
-    uint32_t al_bound0 = 164;
+    uint32_t al_bound0 = 520;
     uint32_t al_bound1 = (test_size & 4096) ? 132 : align_max;
     cur_val &= 4095;
     if (cur_val <= al_bound0) {

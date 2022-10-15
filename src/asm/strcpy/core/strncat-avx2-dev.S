@@ -221,7 +221,7 @@ L(copy_4_7):
 	.p2align 4,, 4
 L(less_1x_vec):
 	btsl	%edx, %ecx
-	vzeroupper
+	COND_VZEROUPPER
 	/* edx already a dependency.  */
 	bsfl	%ecx, %edx
 	testw	%cx, %cx
@@ -247,7 +247,6 @@ L(more_1x_vec):
 # if defined USE_AS_STPCPY || defined USE_AS_STRCAT
 	VMOVU	%ymm0, (%rdi)
 # endif
-
 	addq	%rsi, %rdx
 	subq	%rsi, %rdi
 	orq	$(VEC_SIZE - 1), %rsi
@@ -285,7 +284,7 @@ L(ret_vec_x2):
 	VZEROUPPER_RETURN
 
 
-	.p2align 4,, 8
+	.p2align 4,, 12
 L(ret_vec_x1_len):
 	btsl	%edx, %ecx
 L(ret_vec_x1):
@@ -294,6 +293,14 @@ L(ret_vec_x1):
 	VMOVU	%ymm1, (0 -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
 	VZEROUPPER_RETURN
 
+	.p2align 4,, 8
+L(ret_vec_x3_len):
+	btsl	%edx, %ecx
+L(ret_vec_x3):
+	bsfl	%ecx, %ecx
+	VMOVU	((VEC_SIZE * 2 + 0)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
+	VMOVU	%ymm1, ((VEC_SIZE * 2 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
+	VZEROUPPER_RETURN
 
 	.p2align 4,, 8
 	.p2align 6,, 14
@@ -339,14 +346,6 @@ L(ret_vec_x4):
 	VZEROUPPER_RETURN
 
 
-	.p2align 4,, 1
-L(ret_vec_x3_len):
-	btsl	%edx, %ecx
-L(ret_vec_x3):
-	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE * 2 + 0)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %ymm1
-	VMOVU	%ymm1, ((VEC_SIZE * 2 + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
-	VZEROUPPER_RETURN
 
 
 	.p2align 4,, 8

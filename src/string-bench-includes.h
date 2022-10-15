@@ -11,7 +11,6 @@
         return NULL;                                                           \
     }
 
-#define rawmemchr_make_bench empty_make_bench
 #define wmemcmp_make_bench   empty_make_bench
 #define wcslen_make_bench    empty_make_bench
 #define wcsnlen_make_bench   empty_make_bench
@@ -35,8 +34,14 @@
 #define wcslcpy_make_bench empty_make_bench
 #define wcslcat_make_bench empty_make_bench
 
-#define memset_make_bench empty_make_bench
+#define strcmp_make_bench  empty_make_bench
+#define strncmp_make_bench empty_make_bench
+#define wcscmp_make_bench  empty_make_bench
+#define wcsncmp_make_bench empty_make_bench
 
+
+#define memset_make_bench empty_make_bench
+#define wcschr_make_bench empty_make_bench
 
 #include "bench-memchr.h"
 #include "bench-memcmp.h"
@@ -44,4 +49,5 @@
 #include "bench-strchr.h"
 #include "bench-strlen.h"
 #include "bench-strnlen.h"
+#include "bench-rawmemchr.h"
 #endif

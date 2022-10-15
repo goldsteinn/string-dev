@@ -16,9 +16,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 #include "../../libc-asm-common.h"
-#if IS_IN (libc)
-	// #define USE_AS_RAWMEMCHR
-	// # include <sysdep.h>
+#if ISA_SHOULD_BUILD (3)
 
 # ifndef MEMCHR
 #  define MEMCHR	__memchr_avx2
@@ -47,17 +45,17 @@
 # ifndef VZEROUPPER
 #  define VZEROUPPER	vzeroupper
 # endif
-// abf-off
+
 # ifndef SECTION
 #  define SECTION(p)	p##.avx
 # endif
-// abf-on
-# define VEC_SIZE	32
-# define PAGE_SIZE	4096
+
+# define VEC_SIZE 32
+# define PAGE_SIZE 4096
 # define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
 
-	.section SECTION(.text), "ax", @progbits
-ENTRY_P2ALIGN(MEMCHR, 5)
+	.section SECTION(.text),"ax",@progbits
+ENTRY_P2ALIGN (MEMCHR, 5)
 # ifndef USE_AS_RAWMEMCHR
 	/* Check for zero length.  */
 #  ifdef __ILP32__
@@ -72,25 +70,19 @@ ENTRY_P2ALIGN(MEMCHR, 5)
 	vmovd	%esi, %xmm0
 	VPBROADCAST %xmm0, %ymm0
 	/* Check if we may cross page boundary with one vector load.  */
-# if 0
 	movl	%edi, %eax
 	andl	$(PAGE_SIZE - 1), %eax
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
 	ja	L(cross_page_boundary)
-# else
+
 	/* Check the first VEC_SIZE bytes.  */
-	movq	%rdi, %rcx
-	andq	$-VEC_SIZE, %rdi
-# endif
 	VPCMPEQ	(%rdi), %ymm0, %ymm1
 	vpmovmskb %ymm1, %eax
-
 # ifndef USE_AS_RAWMEMCHR
 	/* If length < CHAR_PER_VEC handle special.  */
 	cmpq	$CHAR_PER_VEC, %rdx
 	jbe	L(first_vec_x0)
 # endif
-	shlxl	%ecx, %eax, %eax
 	testl	%eax, %eax
 	jz	L(aligned_more)
 	bsfl	%eax, %eax
@@ -108,18 +100,17 @@ L(first_vec_x0):
 	/* NB: Multiply length by 4 to get byte count.  */
 	sall	$2, %edx
 #  endif
-	COND_VZEROUPPER
-	/* Use branch instead of cmovcc so L(first_vec_x0) fits in one
-	   fetch block. branch here as opposed to cmovcc is not that
-	   costly. Common usage of memchr is to check if the return was
-	   NULL (if string was known to contain CHAR user would use
-	   rawmemchr). This branch will be highly correlated with the
-	   user branch and can be used by most modern branch predictors
-	   to predict the user branch.  */
+    COND_VZEROUPPER
+	/* Use branch instead of cmovcc so L(first_vec_x0) fits in one fetch
+	   block. branch here as opposed to cmovcc is not that costly. Common
+	   usage of memchr is to check if the return was NULL (if string was
+	   known to contain CHAR user would use rawmemchr). This branch will be
+	   highly correlated with the user branch and can be used by most
+	   modern branch predictors to predict the user branch.  */
 	cmpl	%eax, %edx
-	jle	L(null)
+    jle  L(null)
 	addq	%rdi, %rax
-	ret
+    ret
 # endif
 
 	.p2align 4,, 10
@@ -412,9 +403,9 @@ L(last_vec_x3):
 
 	.p2align 4
 L(cross_page_boundary):
-	/* Save pointer before aligning as its original value is
-	   necessary for computer return address if byte is found or
-	   adjusting length if it is not and this is memchr.  */
+	/* Save pointer before aligning as its original value is necessary for
+	   computer return address if byte is found or adjusting length if it
+	   is not and this is memchr.  */
 	movq	%rdi, %rcx
 	/* Align data to VEC_SIZE - 1. ALGN_PTR_REG is rcx for memchr
 	   and rdi for rawmemchr.  */
@@ -422,8 +413,7 @@ L(cross_page_boundary):
 	VPCMPEQ	-(VEC_SIZE - 1)(%ALGN_PTR_REG), %ymm0, %ymm1
 	vpmovmskb %ymm1, %eax
 # ifndef USE_AS_RAWMEMCHR
-	/* Calculate length until end of page (length checked for a
-	   match).  */
+	/* Calculate length until end of page (length checked for a match).  */
 	leaq	1(%ALGN_PTR_REG), %rsi
 	subq	%RRAW_PTR_REG, %rsi
 #  ifdef USE_AS_WMEMCHR
@@ -440,8 +430,10 @@ L(cross_page_boundary):
 # endif
 	testl	%eax, %eax
 	jz	L(cross_page_continue)
-	tzcntl	%eax, %eax
+	bsfl	%eax, %eax
 	addq	%RRAW_PTR_REG, %rax
-	ZERO_UPPER_VEC_REGISTERS_RETURN
-END(MEMCHR)
+	VZEROUPPER_RETURN
+
+
+END (MEMCHR)
 #endif

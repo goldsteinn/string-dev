@@ -18,7 +18,9 @@
 
 #include "../../libc-asm-common.h"
 #if IS_IN (libc)
-
+# ifndef VEC_SIZE
+#  include "../../libc-defs/libc-evex-vecs.h"
+# endif
 # ifndef STRCAT
 #  define STRCAT  __strcat_evex
 # endif
@@ -35,7 +37,6 @@
 # define USE_AS_STRCAT
 
 /* Number of bytes in a vector register */
-# define VEC_SIZE	32
 
 	.section .text.evex,"ax",@progbits
 ENTRY (STRCAT)

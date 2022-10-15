@@ -22,8 +22,16 @@ set_priors(uint8_t * buf, uint32_t setv, uint32_t ub, uint32_t inc) {
 #define INIT_K   0
 #define INIT_INC 12
 
+//#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
+#ifndef PRINTV
+#define PRINTV(...)
+#endif
+
 #define FAILURE_MSG                                                            \
     "%p != %p, align=%u(%u), pos=%u, len=%u\n", res, expec, i, al_offset, j, k
+
+#define FAILURE_MSG3                                                            \
+    "%p != %p, %u: i=%u, pos=%u, len=%u\n", res, expec, test_size, i, j, k
 
 #define FAILURE_MSG2                                                           \
     "%p != %p, align=%u(%u), pos=%u, len=%u, inc=%u\n", res, expec, i,         \
@@ -33,17 +41,20 @@ static int
 test_memrchr_kernel_robust(void const * test_f, uint32_t test_size) {
     func_switch_t func = { test_f };
     uint8_t *     buf  = make_buf(test_size);
+    uint8_t *     res, *expec;
     memset_c(buf, 0xff, test_size);
-
-    for (uint32_t i = 0; i < test_size; ++i) {
-        for (uint32_t j = 0; j + i < test_size; ++j) {
-            for (uint32_t k = 0; k < 64 && k + i + j < test_size; k += 8) {
+    uint32_t k;
+    for (uint32_t i = INIT_I; i < test_size; ++i) {
+        for (uint32_t j = INIT_J; j + i < test_size; ++j) {
+            for (k = 0; k < 64 && k + i + j < test_size; k += 8) {
                 buf[i + j + k] = 0x1;
             }
             test_assert(run(buf + i, 0x01, j) == NULL);
             if (j) {
                 *(buf + i) = 0x01;
-                assert(run(buf + i, 0x01, j) == buf + i);
+                res        = run(buf + i, 0x01, j);
+                expec      = buf + i;
+                test_assert(res == expec, FAILURE_MSG3);
                 *(buf + i) = 0xff;
             }
             if (i) {
@@ -57,7 +68,7 @@ test_memrchr_kernel_robust(void const * test_f, uint32_t test_size) {
                 *(buf + i + j - 17) = 0x01;
                 assert(run(buf + i, 0x01, j) == (buf + i + j - 1));
 
-                
+
                 *(buf + i + j - 1) = 0xff;
                 assert(run(buf + i, 0x01, j) == (buf + i + j - 17));
                 *(buf + i + j - 17) = 0xff;
@@ -77,13 +88,22 @@ test_memrchr_kernel_robust(void const * test_f, uint32_t test_size) {
 
 static int
 test_memrchr_kernel(void const * test_f, uint32_t test_size) {
-    if (test_size <= 4096) {
+    if (test_size < 4096) {
         return 0;
     }
     func_switch_t func = { test_f };
     uint8_t *     buf  = make_buf(test_size);
     uint8_t *     test_buf;
     memset_c(buf, 0xff, test_size);
+
+    uint8_t * of_buf = buf + 2048;
+    uint64_t  of_len = -1024UL;
+    __asm__ volatile("" : "+r"(of_len) : :);
+    memset(buf, 0x1, 1);
+
+    //    test_assert(run(of_buf, 0x1, of_len) == buf);
+    (void)(of_buf);
+    memset(buf, 0xff, 1);
 
     for (uint32_t i = INIT_I; i < nalignments * 2; ++i) {
         uint32_t al_offset = alignments[i % nalignments];
@@ -98,6 +118,7 @@ test_memrchr_kernel(void const * test_f, uint32_t test_size) {
             for (uint32_t k = INIT_K; k < MIN(test_max, j + 512);
                  k          = k < 512 ? k + 1 : next_v(k, test_size)) {
                 test_buf = buf + al_offset;
+                PRINTV("%u:%u:%u\n", i, j, k);
                 uint8_t *res, *expec;
 
                 expec = NULL;
@@ -175,12 +196,18 @@ test_memrchr_kernel(void const * test_f, uint32_t test_size) {
 
 int
 test_memrchr(void const * test_f) {
-    for (uint32_t i = PAGE_SIZE; i <= 2 * PAGE_SIZE; i += PAGE_SIZE) {
-        test_memrchr_kernel_robust(test_f, i);
-        if (0 && test_memrchr_kernel(test_f, i)) {
-
+    for (uint32_t i = PAGE_SIZE * 1; i <= 2 * PAGE_SIZE; i += PAGE_SIZE) {
+        if (test_memrchr_kernel(test_f, i)) {
             return 1;
         }
     }
+    
+    for (uint32_t i = PAGE_SIZE; i <= 2 * PAGE_SIZE; i += PAGE_SIZE) {
+        if (test_memrchr_kernel_robust(test_f, i)) {
+            return 1;
+        }
+    }
+
+
     return 0;
 }

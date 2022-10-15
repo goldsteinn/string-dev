@@ -41,6 +41,11 @@ set_priors(uint8_t *      buf,
 #define INIT_J   0
 #define INIT_K   0
 #define INIT_INC 12
+
+//#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
+#ifndef PRINTV
+#define PRINTV(...)
+#endif
 static int
 test_strrchr_kernel(void const *   test_f,
                     const uint32_t wsize,
@@ -63,30 +68,52 @@ test_strrchr_kernel(void const *   test_f,
         for (uint32_t j = INIT_J; j < test_max; j += wsize) {
             for (uint32_t k = INIT_K; k < MIN(test_max, j + 164);
                  k          = ROUNDUP_P2(next_v(k, test_size), wsize)) {
-                //                fprintf(stderr, "%u, %u, %u\n", i, j, k);
+                PRINTV("%u, %u, %u\n", i, j, k);
                 test_buf = buf + al_offset;
                 uint8_t *res, *expec;
-                for (uint32_t inc = INIT_INC ? INIT_INC : 12; 1 && inc < 128;
-                     inc += 12) {
-                    set_priors(test_buf, wsize, 0x01010101, j, inc);
-                    memset_c(test_buf + j, 0x01, wsize);
-                    memset_c(test_buf + k, 0x0, wsize);
+                expec           = NULL;
+                res             = NULL;
+                uint32_t priors = 0x01010101;
+                for (uint32_t r = 0; r < 2; ++r) {
+                    for (uint32_t next = wsize;
+                         r && k + next < test_max && next < 256; next += 32) {
+                        memset_c(test_buf + k + next, 0x0, wsize);
+                    }
+                    for (uint32_t inc = INIT_INC ? INIT_INC : 12;
+                         1 && inc < 128; inc += 12) {
+                        set_priors(test_buf, wsize, priors, j, inc);
+                        memset_c(test_buf + j, 0x01, wsize);
+                        memset_c(test_buf + k, 0x0, wsize);
 
-                    res = run(test_buf, 0x01010101);
-                    if (k && (j != k || j != 0)) {
-                        if (j >= k) {
-                            expec = test_buf + (k - ((k - 1) % inc) - 1);
+                        res = run(test_buf, 0x01010101);
+                        if (k && (j != k || j != 0)) {
+                            if (j >= k) {
+                                if (!priors) {
+                                    expec = NULL;
+                                }
+                                else {
+                                    expec =
+                                        test_buf + (k - ((k - 1) % inc) - 1);
+                                }
+                            }
+                            else {
+                                expec = test_buf + j;
+                            }
                         }
                         else {
-                            expec = test_buf + j;
+                            expec = NULL;
                         }
-                    }
-                    else {
-                        expec = NULL;
-                    }
-                    test_assert(expec == res, FAILURE_MSG2);
 
-                    set_priors(test_buf, wsize, 0xffffffff, j, inc);
+
+                        test_assert(expec == res, FAILURE_MSG2);
+
+
+                        set_priors(test_buf, wsize, 0xffffffff, j, inc);
+                    }
+                    for (uint32_t next = wsize;
+                         r && k + next < test_max && next < 256; next += 32) {
+                        memset_c(test_buf + k + next, 0xff, wsize);
+                    }
                 }
 
                 memset_c(test_buf + j, 0xff, wsize);
@@ -103,7 +130,23 @@ test_strrchr_kernel(void const *   test_f,
                 }
                 test_assert(res == expec, FAILURE_MSG);
 
-                test_assert(run(test_buf, 0x0) == test_buf + k, FAILURE_MSG);
+                res   = run(test_buf, 0x0);
+                expec = test_buf + k;
+                test_assert(res == expec, FAILURE_MSG);
+
+                for (uint32_t next = wsize; k + next < test_max && next < 256;
+                     next += 32) {
+                    memset_c(test_buf + k + next, 0x0, wsize);
+                }
+
+                res   = run(test_buf, 0x0);
+                expec = test_buf + k;
+                test_assert(res == expec, FAILURE_MSG);
+
+                for (uint32_t next = wsize; k + next < test_max && next < 256;
+                     next += 32) {
+                    memset_c(test_buf + k + next, 0xff, wsize);
+                }
                 memset_c(test_buf + k, 0xff, wsize);
             }
         }

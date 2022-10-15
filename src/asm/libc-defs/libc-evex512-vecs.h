@@ -30,6 +30,5 @@
 
 #define VEC_lo VEC_any_zmm
 
-#include "libc-reg-macros.h"
 
 #endif

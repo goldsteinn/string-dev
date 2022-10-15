@@ -51,44 +51,46 @@
 	// # include <sysdep.h>
 
 # ifndef MEMCMP
-#  define MEMCMP				__memcmp_evex_movbe
+#  define MEMCMP	__memcmp_evex_movbe
 # endif
 
 # ifndef VEC_SIZE
 #  include "../../libc-defs/libc-evex-vecs.h"
 # endif
-
-/* There are a few places we want seperate logic for evex256 and
-   evex512 to get imm8 encoding.  */
+# include "../../libc-defs/libc-reg-macros.h"
+	/* There are a few places we want seperate logic for evex256 and
+	   evex512 to get imm8 encoding.  */
 # if VEC_SIZE == 32
-#  define LAST_VEC_OFFSET			(0)
+#  define LAST_VEC_OFFSET	(0)
 
-#  define CMP_END				cmpl
-#  define CMP_END_OFFSET			0
+#  define CMP_END	cmpl
+#  define CMP_END_OFFSET	0
 # elif VEC_SIZE == 64
-#  define LAST_VEC_OFFSET			(96)
+#  define LAST_VEC_OFFSET	(96)
 
-#  define CMP_END				subl
-#  define CMP_END_OFFSET			(VEC_SIZE * -3)
+#  define CMP_END	subl
+#  define CMP_END_OFFSET	(VEC_SIZE * -3)
 # else
 #  error "Unsupported VEC_SIZE"
 # endif
 
 
 # ifdef USE_AS_WMEMCMP
-#  define VMOVU_MASK			vmovdqu32
-#  define CHAR_SIZE			4
-#  define VPCMP				vpcmpd
-#  define VPTEST				vptestmd
+#  define VMOVU_MASK	vmovdqu32
+#  define CHAR_SIZE	4
+#  define VPCMP	vpcmpd
+#  define VPTEST	vptestmd
+#  define VPCMPEQ	vpcmpeqd
 # else
-#  define VMOVU_MASK			vmovdqu8
-#  define CHAR_SIZE			1
-#  define VPCMP				vpcmpub
-#  define VPTEST				vptestmb
+#  define VMOVU_MASK	vmovdqu8
+#  define CHAR_SIZE	1
+#  define VPCMP	vpcmpub
+#  define VPCMPEQ	vpcmpeqb
+#  define VPTEST	vptestmb
 # endif
 
-# define PAGE_SIZE			4096
-# define CHAR_PER_VEC			(VEC_SIZE / CHAR_SIZE)
+# define PAGE_SIZE	4096
+# define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
 
 
 	/* Warning! wmemcmp has to use SIGNED comparison for elements.
@@ -109,21 +111,21 @@ ENTRY_P2ALIGN(MEMCMP, 6)
 	/* Create mask of VEC_SIZE width for CHAR's we want to compare.
 	   This allows us to avoid having to include page cross logic.
 	 */
-	mov	$-1, %VGPR(rcx)
-	bzhi	%VGPR(rdx), %VGPR(rcx), %VGPR(rcx)
-	Vkmov	%VGPR(rcx), %k2
+	mov	$-1, %VRCX
+	bzhi	%VRDX, %VRCX, %VRCX
+	kmovV	%VRCX, %k2
 
 	/* Safe to load full ymm with mask.  */
 	VMOVU_MASK (%rsi), %VEC(2){%k2}
 	VPCMP	$4, (%rdi), %VEC(2), %k1{%k2}
-	Vkmov	%k1, %VGPR(rax)
-	test	%VGPR(rax), %VGPR(rax)
+	kmovV	%k1, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_0)
 	ret
 
 	.p2align 4,, 11
 L(return_vec_0):
-	bsf	%VGPR(rax), %VGPR(rax)
+	bsf	%VRAX, %VRAX
 # ifdef USE_AS_WMEMCMP
 	movl	(%rdi, %rax, CHAR_SIZE), %ecx
 	xorl	%edx, %edx
@@ -145,11 +147,11 @@ L(more_1x_vec):
 	VMOVU	(%rsi), %VEC(1)
 	/* Use compare not equals to directly check for mismatch.  */
 	VPCMP	$4, (%rdi), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(eax)
+	kmovV	%k1, %VRAX
 	/* NB: eax must be destination register if going to
 	   L(return_vec_[0,2]). For L(return_vec_3) destination
 	   register must be ecx.  */
-	test	%VGPR(eax), %VGPR(eax)
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_0)
 
 	cmpq	$(CHAR_PER_VEC * 2), %rdx
@@ -158,8 +160,8 @@ L(more_1x_vec):
 	/* Check second VEC no matter what.  */
 	VMOVU	VEC_SIZE(%rsi), %VEC(2)
 	VPCMP	$4, VEC_SIZE(%rdi), %VEC(2), %k1
-	Vkmov	%k1, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k1, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_1)
 
 	/* Less than 4 * VEC.  */
@@ -169,14 +171,14 @@ L(more_1x_vec):
 	/* Check third and fourth VEC no matter what.  */
 	VMOVU	(VEC_SIZE * 2)(%rsi), %VEC(3)
 	VPCMP	$4, (VEC_SIZE * 2)(%rdi), %VEC(3), %k1
-	Vkmov	%k1, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k1, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_2)
 
 	VMOVU	(VEC_SIZE * 3)(%rsi), %VEC(4)
 	VPCMP	$4, (VEC_SIZE * 3)(%rdi), %VEC(4), %k1
-	Vkmov	%k1, %VGPR(ecx)
-	test	%VGPR(ecx), %VGPR(ecx)
+	kmovV	%k1, %VRCX
+	test	%VRCX, %VRCX
 	jnz	L(return_vec_3)
 
 	/* Go to 4x VEC loop.  */
@@ -215,8 +217,8 @@ L(more_1x_vec):
 	 */
 	VPTEST	%VEC(4), %VEC(4), %k1
 	/* k1 must go to ecx for L(return_vec_0_1_2_3).  */
-	Vkmov	%k1, %VGPR(ecx)
-	test	%VGPR(ecx), %VGPR(ecx)
+	kmovV	%k1, %VRCX
+	test	%VRCX, %VRCX
 	jnz	L(return_vec_0_1_2_3)
 	/* NB: eax must be zero to reach here.  */
 	ret
@@ -229,24 +231,24 @@ L(8x_return_vec_0_1_2_3):
 	addq	%rdi, %rsi
 L(return_vec_0_1_2_3):
 	VPTEST	%VEC(1), %VEC(1), %k0
-	Vkmov	%k0, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k0, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_0)
 
 	VPTEST	%VEC(2), %VEC(2), %k0
-	Vkmov	%k0, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k0, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_1)
 
 	VPTEST	%VEC(3), %VEC(3), %k0
-	Vkmov	%k0, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k0, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_2)
 L(return_vec_3):
 	/* bsf saves 1 byte from tzcnt. This keep L(return_vec_3) in one
 	   fetch block and the entire L(*return_vec_0_1_2_3) in 1 cache
 	   line.  */
-	bsf	%VGPR(rcx), %VGPR(rcx)
+	bsf	%VRCX, %VRCX
 # ifdef USE_AS_WMEMCMP
 	movl	(VEC_SIZE * 3)(%rdi, %rcx, CHAR_SIZE), %eax
 	xorl	%edx, %edx
@@ -265,7 +267,7 @@ L(return_vec_3):
 L(return_vec_1):
 	/* bsf saves 1 byte over tzcnt and keeps L(return_vec_1) in one
 	   fetch block.  */
-	bsf	%VGPR(rax), %VGPR(rax)
+	bsf	%VRAX, %VRAX
 # ifdef USE_AS_WMEMCMP
 	movl	VEC_SIZE(%rdi, %rax, CHAR_SIZE), %ecx
 	xorl	%edx, %edx
@@ -283,7 +285,7 @@ L(return_vec_1):
 L(return_vec_2):
 	/* bsf saves 1 byte over tzcnt and keeps L(return_vec_2) in one
 	   fetch block.  */
-	bsf	%VGPR(rax), %VGPR(rax)
+	bsf	%VRAX, %VRAX
 # ifdef USE_AS_WMEMCMP
 	movl	(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %ecx
 	xorl	%edx, %edx
@@ -321,8 +323,8 @@ L(loop_4x_vec):
 	vpternlogd $0xde, (VEC_SIZE * 3)(%rdi), %VEC(1), %VEC(4)
 	vpternlogd $0xfe, %VEC(2), %VEC(3), %VEC(4)
 	VPTEST	%VEC(4), %VEC(4), %k1
-	Vkmov	%k1, %VGPR(ecx)
-	test	%VGPR(ecx), %VGPR(ecx)
+	kmovV	%k1, %VRCX
+	test	%VRCX, %VRCX
 	jnz	L(8x_return_vec_0_1_2_3)
 	subq	$-(VEC_SIZE * 4), %rdi
 	cmpq	%rdx, %rdi
@@ -331,11 +333,11 @@ L(loop_4x_vec):
 	subq	%rdx, %rdi
 	/* rdi has 4 * VEC_SIZE - remaining length.  */
 	CMP_END	$(VEC_SIZE * 3), %edi
-	jae	L(8x_last_1x_vec)
+	jge	L(8x_last_1x_vec)
 	/* Load regardless of branch.  */
 	VMOVU	(VEC_SIZE * 2)(%rsi, %rdx), %VEC(3)
 	cmpl	$(VEC_SIZE * 2 + CMP_END_OFFSET), %edi
-	jae	L(8x_last_2x_vec)
+	jge	L(8x_last_2x_vec)
 
 	vpxorq	(VEC_SIZE * 2)(%rdx), %VEC(3), %VEC(3)
 
@@ -348,8 +350,8 @@ L(loop_4x_vec):
 	vpternlogd $0xde, (VEC_SIZE * 3)(%rdx), %VEC(1), %VEC(4)
 	vpternlogd $0xfe, %VEC(2), %VEC(3), %VEC(4)
 	VPTEST	%VEC(4), %VEC(4), %k1
-	Vkmov	%k1, %VGPR(ecx)
-	test	%VGPR(ecx), %VGPR(ecx)
+	kmovV	%k1, %VRCX
+	test	%VRCX, %VRCX
 	jnz	L(8x_end_return_vec_0_1_2_3)
 	/* NB: eax must be zero to reach here.  */
 	ret
@@ -358,15 +360,15 @@ L(loop_4x_vec):
 	.p2align 4,, 6
 L(8x_last_2x_vec):
 	VPCMP	$4, (VEC_SIZE * 2)(%rdx), %VEC(3), %k1
-	Vkmov	%k1, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k1, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(8x_return_vec_2)
 	.p2align 4,, 5
 L(8x_last_1x_vec):
 	VMOVU	(VEC_SIZE * 3)(%rsi, %rdx), %VEC(1)
 	VPCMP	$4, (VEC_SIZE * 3)(%rdx), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k1, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(8x_return_vec_3)
 	ret
 
@@ -382,7 +384,7 @@ L(8x_last_1x_vec):
 L(8x_return_vec_2):
 	subq	$VEC_SIZE, %rdx
 L(8x_return_vec_3):
-	bsf	%VGPR(rax), %VGPR(rax)
+	bsf	%VRAX, %VRAX
 # ifdef USE_AS_WMEMCMP
 	leaq	(LAST_VEC_OFFSET)(%rdx, %rax, CHAR_SIZE), %rax
 	movl	(VEC_SIZE * 3 - LAST_VEC_OFFSET)(%rax), %ecx
@@ -407,8 +409,8 @@ L(last_2x_vec):
 	/* Check second to last VEC.  */
 	VMOVU	-(VEC_SIZE * 2)(%rsi, %rdx, CHAR_SIZE), %VEC(1)
 	VPCMP	$4, -(VEC_SIZE * 2)(%rdi, %rdx, CHAR_SIZE), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k1, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_1_end)
 
 	/* Check last VEC.  */
@@ -416,8 +418,8 @@ L(last_2x_vec):
 L(last_1x_vec):
 	VMOVU	-(VEC_SIZE * 1)(%rsi, %rdx, CHAR_SIZE), %VEC(1)
 	VPCMP	$4, -(VEC_SIZE * 1)(%rdi, %rdx, CHAR_SIZE), %VEC(1), %k1
-	Vkmov	%k1, %VGPR(eax)
-	test	%VGPR(eax), %VGPR(eax)
+	kmovV	%k1, %VRAX
+	test	%VRAX, %VRAX
 	jnz	L(return_vec_0_end)
 	ret
 
@@ -430,7 +432,7 @@ L(last_1x_vec):
 L(return_vec_1_end):
 	/* Use bsf to save code size. This is necessary to have
 	   L(one_or_less) fit in aligning bytes between.  */
-	bsf	%VGPR(rax), %VGPR(rax)
+	bsf	%VRAX, %VRAX
 	addl	%edx, %eax
 # ifdef USE_AS_WMEMCMP
 	movl	-(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %ecx
@@ -448,7 +450,7 @@ L(return_vec_1_end):
 	/* Don't align. Takes 2-fetch blocks either way and aligning
 	   will cause code to spill into another cacheline.  */
 L(return_vec_0_end):
-	tzcnt	%VGPR(rax), %VGPR(rax)
+	tzcnt	%VRAX, %VRAX
 	addl	%edx, %eax
 # ifdef USE_AS_WMEMCMP
 	movl	-VEC_SIZE(%rdi, %rax, CHAR_SIZE), %ecx

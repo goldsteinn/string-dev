@@ -24,7 +24,6 @@
 #error "Never include this file directly. Always include a vector config."
 #endif
 
-#include "libc-reg-macros.h"
 
 /* Defines so we can use SSE2 / AVX2 / EVEX / EVEX512 encoding with same
    VEC(N) values.  */

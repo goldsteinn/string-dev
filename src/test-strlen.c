@@ -33,9 +33,9 @@ done:
 
 #define INIT_I 0
 #define INIT_J 0
-#define INIT_K 1
+#define INIT_K 0
 
-#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
+//#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
 
 #ifndef PRINTV
 #define PRINTV(...)
@@ -64,7 +64,13 @@ test_strlen_kernel(void const * test_f,
     die_assert(wsize == 1 || wsize == 4);
 
     memset_c(buf, 0x1, test_size);
-
+    if (maxlen && 0) {
+        memset(buf, 0x1, test_size);
+        for (i = 0; i < test_size; i += wsize) {
+            test_buf = buf + (test_size - i);
+            test_assert((i >> wsize_shift) == run(test_buf, i >> wsize_shift));
+        }
+    }
     for (i = INIT_I; i < nalignments * 2; ++i) {
         uint64_t al_offset = ROUNDUP_P2(alignments[i % nalignments], wsize);
         fprintf(stderr, "%lu -> %lu\n", i, al_offset);
@@ -89,7 +95,8 @@ test_strlen_kernel(void const * test_f,
 
                 PRINTV("%lu(%lu):%lu:%lu\n", i, al_offset, j, k);
                 for (next = 0; next <= 128;
-                     next = (next == 0 ? 32 : (next + next))) {
+                     next = (next <= wsize ? (next ? 32 : wsize)
+                                           : (next + next))) {
                     if (1 && next && j + next < test_max) {
                         memset_c(test_buf + j + next, 0x0, wsize);
                     }
@@ -116,10 +123,8 @@ test_strlen_kernel(void const * test_f,
                         expec >>= wsize_shift;
 
                         res = run(test_buf, k >> wsize_shift);
-                        test_assert(expec == res, TEST_ERR)
-
-                            memset_c(test_buf + j, 0x0, wsize);
-                        ;
+                        test_assert(expec == res, TEST_ERR);
+                        memset_c(test_buf + j, 0x0, wsize);
                     }
 
                     if (1 && next && j + next < test_max) {
@@ -160,6 +165,22 @@ test_strlen_kernel(void const * test_f,
                 k   = 1UL << 62;
                 res = run(test_buf, k);
                 test_assert(expec == res, TEST_ERR);
+
+                k   = (uint64_t)test_buf;
+                res = run(test_buf, k);
+                test_assert(expec == res, TEST_ERR);
+
+                k   = -(uint64_t)test_buf;
+                res = run(test_buf, k);
+                test_assert(expec == res, TEST_ERR);
+
+                k   = 1UL - (uint64_t)test_buf;
+                res = run(test_buf, k);
+                test_assert(expec == res, TEST_ERR);
+
+                k   = -1UL - (uint64_t)test_buf;
+                res = run(test_buf, k);
+                test_assert(expec == res, TEST_ERR);
             }
 
             memset_c(test_buf + j, 0x1, wsize);
@@ -175,6 +196,8 @@ test_strlen_kernel(void const * test_f,
             }
         }
     }
+
+
     free_buf(buf, test_size);
 
     return 0;

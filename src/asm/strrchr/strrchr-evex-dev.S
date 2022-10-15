@@ -1,2 +1,3 @@
-#define STRRCHR strrchr_evex_dev
-#include "core/strrchr-evex-dev-final.S"
+#define STRRCHR	strrchr_evex_dev
+#include "../libc-defs/libc-evex-vecs.h"
+#include "core/strrchr-evex-final.S"

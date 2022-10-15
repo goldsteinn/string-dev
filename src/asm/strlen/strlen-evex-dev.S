@@ -1,2 +1,5 @@
-#define STRLEN				strlen_evex_dev
-#include "core/strlen-evex-dev.S"
+#ifndef STRLEN
+# define STRLEN	strlen_evex_dev
+#endif
+#include "../libc-defs/libc-evex-vecs.h"
+#include "core/strlen-evex-final.S"

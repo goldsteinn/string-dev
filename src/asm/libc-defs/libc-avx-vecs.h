@@ -7,7 +7,6 @@
 #endif
 
 #define HAS_VEC 1
-#include "libc-vec-macros.h"
 
 #ifndef USE_WITH_AVX2
 #define USE_WITH_AVX 1

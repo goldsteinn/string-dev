@@ -1,5 +1,5 @@
-/* memrchr optimized with AVX2.
-   Copyright (C) 2017-2022 Free Software Foundation, Inc.
+/* memrchr optimized with 256-bit EVEX instructions.
+   Copyright (C) 2021-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -17,9 +17,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include "../../libc-asm-common.h"
-#if IS_IN (libc)
-
+#ifndef VEC_SIZE
 # include "../../libc-defs/libc-evex-vecs.h"
+#endif
+
+#if ISA_SHOULD_BUILD (4)
+
+
+# if VEC_SIZE != 32
+#  error "VEC_SIZE != 32 unimplemented"
+# endif
 
 # ifndef MEMRCHR
 #  define MEMRCHR				__memrchr_evex
@@ -59,7 +66,7 @@ ENTRY_P2ALIGN(MEMRCHR, 6)
 L(ret_vec_x0_test):
 
 	/* If ecx is zero (no matches) lzcnt will set it 32 (VEC_SIZE) which
-	   will gurantee edx (len) is less than it.  */
+	   will guarantee edx (len) is less than it.  */
 	lzcntl	%ecx, %ecx
 	cmpl	%ecx, %edx
 	jle	L(zero_0)
@@ -109,7 +116,7 @@ L(last_2x_vec):
 	jnz	L(ret_vec_x0)
 
 	/* Don't use rax for pointer here because EVEX has better encoding with
-	   offset % VEC_SIZE == 0.  */
+	offset % VEC_SIZE == 0.  */
 	vpcmpb	$0, -(VEC_SIZE * 2)(%rdi, %rdx), %VECMATCH, %k0
 	kmovd	%k0, %ecx
 	/* NB: 64-bit lzcnt. This will naturally add 32 to position.  */
@@ -121,7 +128,7 @@ L(last_2x_vec):
 
 	/* Inexpensive place to put this regarding code size / target alignments
 	   / ICache NLP. Necessary for 2-byte encoding of jump to page cross
-	   case which inturn in necessray for hot path (len <= VEC_SIZE) to fit
+	   case which in turn is necessary for hot path (len <= VEC_SIZE) to fit
 	   in first cache line.  */
 L(page_cross):
 	movq	%rax, %rsi
@@ -222,7 +229,7 @@ L(more_4x_vec):
 	jnz	L(ret_vec_x3)
 
 	/* Check if near end before re-aligning (otherwise might do an
-	   unnecissary loop iteration).  */
+	   unnecessary loop iteration).  */
 	addq	$-(VEC_SIZE * 4), %rax
 	cmpq	$(VEC_SIZE * 4), %rdx
 	jbe	L(last_4x_vec)
