@@ -18,8 +18,8 @@
 #include "../../libc-asm-common.h"
 #if IS_IN (libc)
 # include "../../libc-defs/libc-evex512-vecs.h"
-# ifndef HAS_VEC
-#  include "../../libc-defs/libc-evex-vecs.h"
+# ifndef VEC_SIZE
+#  include "../../libc-defs/libc-evex256-vecs.h"
 # endif
 
 	/* memcmp/wmemcmp is implemented as: 1. Use ymm vector compares
@@ -57,7 +57,7 @@
 # ifndef VEC_SIZE
 #  include "../../libc-defs/libc-evex-vecs.h"
 # endif
-# include "../../libc-defs/libc-reg-macros.h"
+
 	/* There are a few places we want seperate logic for evex256 and
 	   evex512 to get imm8 encoding.  */
 # if VEC_SIZE == 32
@@ -81,6 +81,8 @@
 #  define VPCMP	vpcmpd
 #  define VPTEST	vptestmd
 #  define VPCMPEQ	vpcmpeqd
+
+#  define USE_WIDE_CHAR
 # else
 #  define VMOVU_MASK	vmovdqu8
 #  define CHAR_SIZE	1
@@ -91,7 +93,7 @@
 
 # define PAGE_SIZE	4096
 # define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
-
+# include "../../libc-defs/libc-reg-macros.h"
 
 	/* Warning! wmemcmp has to use SIGNED comparison for elements.
 	   memcmp has to use UNSIGNED comparison for elemnts.  */
@@ -113,12 +115,12 @@ ENTRY_P2ALIGN(MEMCMP, 6)
 	 */
 	mov	$-1, %VRCX
 	bzhi	%VRDX, %VRCX, %VRCX
-	kmovV	%VRCX, %k2
+	KMOV	%VRCX, %k2
 
 	/* Safe to load full ymm with mask.  */
-	VMOVU_MASK (%rsi), %VEC(2){%k2}
-	VPCMP	$4, (%rdi), %VEC(2), %k1{%k2}
-	kmovV	%k1, %VRAX
+	VMOVU_MASK (%rsi), %VMM(2){%k2}
+	VPCMP	$4, (%rdi), %VMM(2), %k1{%k2}
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_0)
 	ret
@@ -144,10 +146,10 @@ L(return_vec_0):
 	.p2align 4,, 11
 L(more_1x_vec):
 	/* From VEC to 2 * VEC.  No branch when size == VEC_SIZE.  */
-	VMOVU	(%rsi), %VEC(1)
+	VMOVU	(%rsi), %VMM(1)
 	/* Use compare not equals to directly check for mismatch.  */
-	VPCMP	$4, (%rdi), %VEC(1), %k1
-	kmovV	%k1, %VRAX
+	VPCMP	$4, (%rdi), %VMM(1), %k1
+	KMOV	%k1, %VRAX
 	/* NB: eax must be destination register if going to
 	   L(return_vec_[0,2]). For L(return_vec_3) destination
 	   register must be ecx.  */
@@ -158,9 +160,9 @@ L(more_1x_vec):
 	jbe	L(last_1x_vec)
 
 	/* Check second VEC no matter what.  */
-	VMOVU	VEC_SIZE(%rsi), %VEC(2)
-	VPCMP	$4, VEC_SIZE(%rdi), %VEC(2), %k1
-	kmovV	%k1, %VRAX
+	VMOVU	VEC_SIZE(%rsi), %VMM(2)
+	VPCMP	$4, VEC_SIZE(%rdi), %VMM(2), %k1
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_1)
 
@@ -169,15 +171,15 @@ L(more_1x_vec):
 	jbe	L(last_2x_vec)
 
 	/* Check third and fourth VEC no matter what.  */
-	VMOVU	(VEC_SIZE * 2)(%rsi), %VEC(3)
-	VPCMP	$4, (VEC_SIZE * 2)(%rdi), %VEC(3), %k1
-	kmovV	%k1, %VRAX
+	VMOVU	(VEC_SIZE * 2)(%rsi), %VMM(3)
+	VPCMP	$4, (VEC_SIZE * 2)(%rdi), %VMM(3), %k1
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_2)
 
-	VMOVU	(VEC_SIZE * 3)(%rsi), %VEC(4)
-	VPCMP	$4, (VEC_SIZE * 3)(%rdi), %VEC(4), %k1
-	kmovV	%k1, %VRCX
+	VMOVU	(VEC_SIZE * 3)(%rsi), %VMM(4)
+	VPCMP	$4, (VEC_SIZE * 3)(%rdi), %VMM(4), %k1
+	KMOV	%k1, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(return_vec_3)
 
@@ -189,8 +191,8 @@ L(more_1x_vec):
 	   branches.  */
 
 	/* Load first two VEC from s2 before adjusting addresses.  */
-	VMOVU	-(VEC_SIZE * 4)(%rsi, %rdx, CHAR_SIZE), %VEC(1)
-	VMOVU	-(VEC_SIZE * 3)(%rsi, %rdx, CHAR_SIZE), %VEC(2)
+	VMOVU	-(VEC_SIZE * 4)(%rsi, %rdx, CHAR_SIZE), %VMM(1)
+	VMOVU	-(VEC_SIZE * 3)(%rsi, %rdx, CHAR_SIZE), %VMM(2)
 	leaq	-(4 * VEC_SIZE)(%rdi, %rdx, CHAR_SIZE), %rdi
 	leaq	-(4 * VEC_SIZE)(%rsi, %rdx, CHAR_SIZE), %rsi
 
@@ -199,25 +201,25 @@ L(more_1x_vec):
 
 	/* vpxor will be all 0s if s1 and s2 are equal. Otherwise it
 	   will have some 1s.  */
-	vpxorq	(%rdi), %VEC(1), %VEC(1)
-	vpxorq	(VEC_SIZE)(%rdi), %VEC(2), %VEC(2)
+	vpxorq	(%rdi), %VMM(1), %VMM(1)
+	vpxorq	(VEC_SIZE)(%rdi), %VMM(2), %VMM(2)
 
-	VMOVU	(VEC_SIZE * 2)(%rsi), %VEC(3)
-	vpxorq	(VEC_SIZE * 2)(%rdi), %VEC(3), %VEC(3)
+	VMOVU	(VEC_SIZE * 2)(%rsi), %VMM(3)
+	vpxorq	(VEC_SIZE * 2)(%rdi), %VMM(3), %VMM(3)
 
-	VMOVU	(VEC_SIZE * 3)(%rsi), %VEC(4)
+	VMOVU	(VEC_SIZE * 3)(%rsi), %VMM(4)
 	/* Ternary logic to xor (VEC_SIZE * 3)(%rdi) with VEC(4) while
 	   oring with VEC(1). Result is stored in VEC(4).  */
-	vpternlogd $0xde, (VEC_SIZE * 3)(%rdi), %VEC(1), %VEC(4)
+	vpternlogd $0xde, (VEC_SIZE * 3)(%rdi), %VMM(1), %VMM(4)
 
 	/* Or together VEC(2), VEC(3), and VEC(4) into VEC(4).  */
-	vpternlogd $0xfe, %VEC(2), %VEC(3), %VEC(4)
+	vpternlogd $0xfe, %VMM(2), %VMM(3), %VMM(4)
 
 	/* Test VEC(4) against itself. Store any CHAR mismatches in k1.
 	 */
-	VPTEST	%VEC(4), %VEC(4), %k1
+	VPTEST	%VMM(4), %VMM(4), %k1
 	/* k1 must go to ecx for L(return_vec_0_1_2_3).  */
-	kmovV	%k1, %VRCX
+	KMOV	%k1, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(return_vec_0_1_2_3)
 	/* NB: eax must be zero to reach here.  */
@@ -230,18 +232,18 @@ L(8x_end_return_vec_0_1_2_3):
 L(8x_return_vec_0_1_2_3):
 	addq	%rdi, %rsi
 L(return_vec_0_1_2_3):
-	VPTEST	%VEC(1), %VEC(1), %k0
-	kmovV	%k0, %VRAX
+	VPTEST	%VMM(1), %VMM(1), %k0
+	KMOV	%k0, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_0)
 
-	VPTEST	%VEC(2), %VEC(2), %k0
-	kmovV	%k0, %VRAX
+	VPTEST	%VMM(2), %VMM(2), %k0
+	KMOV	%k0, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_1)
 
-	VPTEST	%VEC(3), %VEC(3), %k0
-	kmovV	%k0, %VRAX
+	VPTEST	%VMM(3), %VMM(3), %k0
+	KMOV	%k0, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_2)
 L(return_vec_3):
@@ -313,17 +315,17 @@ L(more_8x_vec):
 
 	.p2align 4
 L(loop_4x_vec):
-	VMOVU	(%rsi, %rdi), %VEC(1)
-	vpxorq	(%rdi), %VEC(1), %VEC(1)
-	VMOVU	VEC_SIZE(%rsi, %rdi), %VEC(2)
-	vpxorq	VEC_SIZE(%rdi), %VEC(2), %VEC(2)
-	VMOVU	(VEC_SIZE * 2)(%rsi, %rdi), %VEC(3)
-	vpxorq	(VEC_SIZE * 2)(%rdi), %VEC(3), %VEC(3)
-	VMOVU	(VEC_SIZE * 3)(%rsi, %rdi), %VEC(4)
-	vpternlogd $0xde, (VEC_SIZE * 3)(%rdi), %VEC(1), %VEC(4)
-	vpternlogd $0xfe, %VEC(2), %VEC(3), %VEC(4)
-	VPTEST	%VEC(4), %VEC(4), %k1
-	kmovV	%k1, %VRCX
+	VMOVU	(%rsi, %rdi), %VMM(1)
+	vpxorq	(%rdi), %VMM(1), %VMM(1)
+	VMOVU	VEC_SIZE(%rsi, %rdi), %VMM(2)
+	vpxorq	VEC_SIZE(%rdi), %VMM(2), %VMM(2)
+	VMOVU	(VEC_SIZE * 2)(%rsi, %rdi), %VMM(3)
+	vpxorq	(VEC_SIZE * 2)(%rdi), %VMM(3), %VMM(3)
+	VMOVU	(VEC_SIZE * 3)(%rsi, %rdi), %VMM(4)
+	vpternlogd $0xde, (VEC_SIZE * 3)(%rdi), %VMM(1), %VMM(4)
+	vpternlogd $0xfe, %VMM(2), %VMM(3), %VMM(4)
+	VPTEST	%VMM(4), %VMM(4), %k1
+	KMOV	%k1, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(8x_return_vec_0_1_2_3)
 	subq	$-(VEC_SIZE * 4), %rdi
@@ -335,22 +337,22 @@ L(loop_4x_vec):
 	CMP_END	$(VEC_SIZE * 3), %edi
 	jge	L(8x_last_1x_vec)
 	/* Load regardless of branch.  */
-	VMOVU	(VEC_SIZE * 2)(%rsi, %rdx), %VEC(3)
+	VMOVU	(VEC_SIZE * 2)(%rsi, %rdx), %VMM(3)
 	cmpl	$(VEC_SIZE * 2 + CMP_END_OFFSET), %edi
 	jge	L(8x_last_2x_vec)
 
-	vpxorq	(VEC_SIZE * 2)(%rdx), %VEC(3), %VEC(3)
+	vpxorq	(VEC_SIZE * 2)(%rdx), %VMM(3), %VMM(3)
 
-	VMOVU	(%rsi, %rdx), %VEC(1)
-	vpxorq	(%rdx), %VEC(1), %VEC(1)
+	VMOVU	(%rsi, %rdx), %VMM(1)
+	vpxorq	(%rdx), %VMM(1), %VMM(1)
 
-	VMOVU	VEC_SIZE(%rsi, %rdx), %VEC(2)
-	vpxorq	VEC_SIZE(%rdx), %VEC(2), %VEC(2)
-	VMOVU	(VEC_SIZE * 3)(%rsi, %rdx), %VEC(4)
-	vpternlogd $0xde, (VEC_SIZE * 3)(%rdx), %VEC(1), %VEC(4)
-	vpternlogd $0xfe, %VEC(2), %VEC(3), %VEC(4)
-	VPTEST	%VEC(4), %VEC(4), %k1
-	kmovV	%k1, %VRCX
+	VMOVU	VEC_SIZE(%rsi, %rdx), %VMM(2)
+	vpxorq	VEC_SIZE(%rdx), %VMM(2), %VMM(2)
+	VMOVU	(VEC_SIZE * 3)(%rsi, %rdx), %VMM(4)
+	vpternlogd $0xde, (VEC_SIZE * 3)(%rdx), %VMM(1), %VMM(4)
+	vpternlogd $0xfe, %VMM(2), %VMM(3), %VMM(4)
+	VPTEST	%VMM(4), %VMM(4), %k1
+	KMOV	%k1, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(8x_end_return_vec_0_1_2_3)
 	/* NB: eax must be zero to reach here.  */
@@ -359,15 +361,15 @@ L(loop_4x_vec):
 	/* Only entry is from L(more_8x_vec).  */
 	.p2align 4,, 6
 L(8x_last_2x_vec):
-	VPCMP	$4, (VEC_SIZE * 2)(%rdx), %VEC(3), %k1
-	kmovV	%k1, %VRAX
+	VPCMP	$4, (VEC_SIZE * 2)(%rdx), %VMM(3), %k1
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(8x_return_vec_2)
 	.p2align 4,, 5
 L(8x_last_1x_vec):
-	VMOVU	(VEC_SIZE * 3)(%rsi, %rdx), %VEC(1)
-	VPCMP	$4, (VEC_SIZE * 3)(%rdx), %VEC(1), %k1
-	kmovV	%k1, %VRAX
+	VMOVU	(VEC_SIZE * 3)(%rsi, %rdx), %VMM(1)
+	VPCMP	$4, (VEC_SIZE * 3)(%rdx), %VMM(1), %k1
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(8x_return_vec_3)
 	ret
@@ -407,18 +409,18 @@ L(8x_return_vec_3):
 	.p2align 4,, 8
 L(last_2x_vec):
 	/* Check second to last VEC.  */
-	VMOVU	-(VEC_SIZE * 2)(%rsi, %rdx, CHAR_SIZE), %VEC(1)
-	VPCMP	$4, -(VEC_SIZE * 2)(%rdi, %rdx, CHAR_SIZE), %VEC(1), %k1
-	kmovV	%k1, %VRAX
+	VMOVU	-(VEC_SIZE * 2)(%rsi, %rdx, CHAR_SIZE), %VMM(1)
+	VPCMP	$4, -(VEC_SIZE * 2)(%rdi, %rdx, CHAR_SIZE), %VMM(1), %k1
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_1_end)
 
 	/* Check last VEC.  */
 	.p2align 4
 L(last_1x_vec):
-	VMOVU	-(VEC_SIZE * 1)(%rsi, %rdx, CHAR_SIZE), %VEC(1)
-	VPCMP	$4, -(VEC_SIZE * 1)(%rdi, %rdx, CHAR_SIZE), %VEC(1), %k1
-	kmovV	%k1, %VRAX
+	VMOVU	-(VEC_SIZE * 1)(%rsi, %rdx, CHAR_SIZE), %VMM(1)
+	VPCMP	$4, -(VEC_SIZE * 1)(%rdi, %rdx, CHAR_SIZE), %VMM(1), %k1
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jnz	L(return_vec_0_end)
 	ret

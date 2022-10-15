@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef VEC_SIZE
-# include "../../libc-defs/libc-evex-vecs.h"
+# include "../../libc-defs/libc-evex256-vecs.h"
 #endif /* !VEC_SIZE */
 	// #define USE_AS_STRNLEN
 #include "../../libc-asm-common.h"

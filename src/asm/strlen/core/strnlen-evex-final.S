@@ -25,9 +25,11 @@
 
 #if ISA_SHOULD_BUILD (4)
 
-# ifdef USE_AS_WCSLEN
+# ifndef STRNLEN
+#  define STRNLEN	__strnlen_evex
+# endif
 
-#  define REG_WIDTH	32
+# ifdef USE_AS_WCSLEN
 #  define VPCMPEQ	vpcmpeqd
 #  define VPCMPNEQ	vpcmpneqd
 #  define VPTESTN	vptestnmd
@@ -35,18 +37,19 @@
 #  define VPMINU	vpminud
 #  define CHAR_SIZE	4
 
-# else	/* !USE_AS_WCSLEN */
-
-#  define REG_WIDTH	VEC_SIZE
+# else
 #  define VPCMPEQ	vpcmpeqb
 #  define VPCMPNEQ	vpcmpneqb
 #  define VPTESTN	vptestnmb
 #  define VPTEST	vptestmb
 #  define VPMINU	vpminub
 #  define CHAR_SIZE	1
-# endif	/* !USE_AS_WCSLEN */
-# define PAGE_SIZE	4096
+	
+#  define REG_WIDTH	VEC_SIZE
+# endif
+
 # define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
+
 # include "../../libc-defs/libc-reg-macros.h"
 
 # if CHAR_PER_VEC == 32
@@ -59,23 +62,24 @@
 
 # if CHAR_PER_VEC == 64
 #  define FALLTHROUGH_RETURN_OFFSET	(CHAR_PER_VEC * 3)
-# else	/* !(CHAR_PER_VEC == 64) */
+# else
 #  define FALLTHROUGH_RETURN_OFFSET	(CHAR_PER_VEC * 2)
-# endif	/* !(CHAR_PER_VEC == 64) */
+# endif
 
 
-# define XZERO	VEC_xmm(0)
-# define VZERO	VEC(0)
+# define XZERO	VMM_128(0)
+# define VZERO	VMM(0)
+# define PAGE_SIZE	4096
 
-	.section .text.evex, "ax", @progbits
-ENTRY_P2ALIGN(STRLEN, 6)
+	.section SECTION(.text), "ax", @progbits
+ENTRY_P2ALIGN(STRNLEN, 6)
 	/* Check zero length.  */
 	test	%RSI_LP, %RSI_LP
 	jz	L(zero)
 # ifdef __ILP32__
 	/* Clear the upper 32 bits.  */
 	movl	%esi, %esi
-# endif	/* __ILP32__ */
+# endif
 
 	movl	%edi, %eax
 	vpxorq	%XZERO, %XZERO, %XZERO
@@ -87,7 +91,7 @@ ENTRY_P2ALIGN(STRLEN, 6)
 	   null byte.  */
 	VPCMPEQ	(%rdi), %VZERO, %k0
 
-	kmovV	%k0, %VRCX
+	KMOV	%k0, %VRCX
 	movq	%rsi, %rax
 
 	/* If src (rcx) is zero, bsf does not change the result.  NB:
@@ -140,15 +144,15 @@ L(cross_page_continue):
 	ja	L(more_2x_vec)
 
 L(last_2x_vec_or_less):
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	test	%VRDX, %VRDX
 	jnz	L(last_vec_check)
 
 	/* Check the end of data.  */
-	SUB_SHORT (CHAR_PER_VEC, eax)
+	SUB_SHORT (CHAR_PER_VEC, rax)
 	jbe	L(max_0)
 	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VZERO, %k0
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	test	%VRDX, %VRDX
 	jz	L(max_0)
 	/* Best place for LAST_VEC_CHECK if ZMM.  */
@@ -181,13 +185,13 @@ L(more_2x_vec):
 	/* Remaining length >= 2 * CHAR_PER_VEC so do VEC0/VEC1 without
 	   rechecking bounds.  */
 
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 
 	test	%VRDX, %VRDX
 	jnz	L(first_vec_x1)
 
 	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VZERO, %k0
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	test	%VRDX, %VRDX
 	jnz	L(first_vec_x2)
 
@@ -196,7 +200,7 @@ L(more_2x_vec):
 
 
 	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VZERO, %k0
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	addl	$(CHAR_PER_VEC * -2), %eax
 	test	%VRDX, %VRDX
 	jnz	L(last_vec_check)
@@ -205,7 +209,7 @@ L(more_2x_vec):
 	jbe	L(max_1)
 
 	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VZERO, %k0
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 
 	test	%VRDX, %VRDX
 	jnz	L(last_vec_check)
@@ -216,6 +220,8 @@ L(max_1):
 	.p2align 4,, 3
 L(first_vec_x2):
 # if VEC_SIZE == 64
+	/* If VEC_SIZE == 64 we can fit logic for full return label in
+	   spare bytes before next cache line.  */
 	bsf	%VRDX, %VRDX
 	sub	%eax, %esi
 	leal	(CHAR_PER_VEC * 1)(%rsi, %rdx), %eax
@@ -234,6 +240,8 @@ L(first_vec_x1):
 	.p2align 4,, 6
 L(first_vec_x4):
 # if VEC_SIZE == 64
+	/* If VEC_SIZE == 64 we can fit logic for full return label in
+	   spare bytes before next cache line.  */
 	bsf	%VRDX, %VRDX
 	sub	%eax, %esi
 	leal	(CHAR_PER_VEC * 3)(%rsi, %rdx), %eax
@@ -251,12 +259,12 @@ L(first_vec_x3):
 	.p2align 4,, 5
 L(more_4x_vec):
 	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VZERO, %k0
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	test	%VRDX, %VRDX
 	jnz	L(first_vec_x3)
 
 	VPCMPEQ	(VEC_SIZE * 4)(%rdi), %VZERO, %k0
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	test	%VRDX, %VRDX
 	jnz	L(first_vec_x4)
 
@@ -279,6 +287,9 @@ L(more_4x_vec):
 
 	/* Align data to VEC_SIZE * 4.  */
 # if VEC_SIZE == 64
+	/* Saves code size.  No evex512 processor has partial register
+	   stalls.  If that change this can be replaced with `andq
+	   $-(VEC_SIZE * 4), %rdi`.  */
 	xorb	%dil, %dil
 # else
 	andq	$-(VEC_SIZE * 4), %rdi
@@ -294,41 +305,45 @@ L(more_4x_vec):
 	/* Compare 4 * VEC at a time forward.  */
 	.p2align 4,, 11
 L(loop_4x_vec):
-	VMOVA	(VEC_SIZE * 4)(%rdi), %VEC(1)
-	VPMINU	(VEC_SIZE * 5)(%rdi), %VEC(1), %VEC(2)
-	VMOVA	(VEC_SIZE * 6)(%rdi), %VEC(3)
-	VPMINU	(VEC_SIZE * 7)(%rdi), %VEC(3), %VEC(4)
-	VPTESTN	%VEC(2), %VEC(2), %k0
-	VPTESTN	%VEC(4), %VEC(4), %k2
+	VMOVA	(VEC_SIZE * 4)(%rdi), %VMM(1)
+	VPMINU	(VEC_SIZE * 5)(%rdi), %VMM(1), %VMM(2)
+	VMOVA	(VEC_SIZE * 6)(%rdi), %VMM(3)
+	VPMINU	(VEC_SIZE * 7)(%rdi), %VMM(3), %VMM(4)
+	VPTESTN	%VMM(2), %VMM(2), %k0
+	VPTESTN	%VMM(4), %VMM(4), %k2
 	subq	$-(VEC_SIZE * 4), %rdi
 	/* Break if at end of length.  */
 	subq	$(CHAR_PER_VEC * 4), %rax
 	jbe	L(loop_len_end)
 
 
-	kortestV %k0, %k2
+	KORTEST %k0, %k2
 	jz	L(loop_4x_vec)
 
 
 L(loop_last_4x_vec):
 	movq	%rsi, %rcx
 	subq	%rax, %rsi
-	VPTESTN	%VEC(1), %VEC(1), %k1
-	kmovV	%k1, %VRDX
+	VPTESTN	%VMM(1), %VMM(1), %k1
+	KMOV	%k1, %VRDX
 	test	%VRDX, %VRDX
 	jnz	L(last_vec_x0)
 
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	test	%VRDX, %VRDX
 	jnz	L(last_vec_x1)
 
-	VPTESTN	%VEC(3), %VEC(3), %k0
+	VPTESTN	%VMM(3), %VMM(3), %k0
 
+	/* Seperate logic for VEC_SIZE == 64 and VEC_SIZE == 32 for
+	   returning last 2x VEC. For VEC_SIZE == 64 we test each VEC
+	   individually, for VEC_SIZE == 32 we combine them in a single
+	   64-bit GPR.  */
 # if CHAR_PER_VEC == 64
-	kmovV	%k0, %VRDX
+	KMOV	%k0, %VRDX
 	test	%VRDX, %VRDX
 	jnz	L(last_vec_x2)
-	kmovV	%k2, %VRDX
+	KMOV	%k2, %VRDX
 # else
 	/* We can only combine last 2x VEC masks if CHAR_PER_VEC <= 32.
 	 */
@@ -349,13 +364,15 @@ L(loop_last_4x_vec):
 	/* Handle last 4x VEC after loop. All VECs have been loaded.  */
 	.p2align 4,, 4
 L(loop_len_end):
-	kortestV %k0, %k2
+	KORTEST %k0, %k2
 	jnz	L(loop_last_4x_vec)
 	movq	%rsi, %rax
 	ret
 
 
 # if CHAR_PER_VEC == 64
+	/* Since we can't combine the last 2x VEC for VEC_SIZE == 64
+	   need return label for it.  */
 	.p2align 4,, 8
 L(last_vec_x2):
 	bsf	%VRDX, %VRDX
@@ -384,7 +401,7 @@ L(cross_page_boundary):
 	andq	$-VEC_SIZE, %rcx
 	VPCMPEQ	(%rcx), %VZERO, %k0
 
-	kmovV	%k0, %VRCX
+	KMOV	%k0, %VRCX
 # ifdef USE_AS_WCSLEN
 	shrl	$2, %eax
 	andl	$(CHAR_PER_VEC - 1), %eax
@@ -401,6 +418,5 @@ L(cross_page_boundary):
 	cmpq	%rdx, %rsi
 	cmovb	%esi, %eax
 	ret
-
-END(STRLEN)
+END(STRNLEN)
 #endif

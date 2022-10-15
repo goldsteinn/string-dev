@@ -28,12 +28,9 @@
 #  define STRRCHR	tmp
 # endif
 
-# define VMOVU	vmovdqu64
-# define VMOVA	vmovdqa64
-
 # ifdef USE_AS_WCSRCHR
 #  define RCX_M	cl
-#  define SHIFT_REG	ecx
+#  define SHIFT_REG	rcx
 #  define VPCOMPRESS	vpcompressd
 #  define kunpck_2x	kunpckbw
 #  define kmov_2x	kmovd
@@ -47,10 +44,10 @@
 #  define VPCMPEQ	vpcmpeqd
 #  define VPCMP	vpcmpd
 
-#  define REG_WIDTH	32
+#  define USE_WIDE_CHAR
 # else
 #  define RCX_M	ecx
-#  define SHIFT_REG	edi
+#  define SHIFT_REG	rdi
 #  define VPCOMPRESS	vpcompressb
 #  define kunpck_2x	kunpckdq
 #  define kmov_2x	kmovq
@@ -64,21 +61,15 @@
 #  define VPBROADCAST	vpbroadcastb
 #  define VPCMPEQ	vpcmpeqb
 #  define VPCMP	vpcmpb
-
-#  define REG_WIDTH	VEC_SIZE
 # endif
-
-
 
 # include "../../libc-defs/libc-reg-macros.h"
 
-# define VMATCH	VEC(0)
+# define VMATCH	VMM(0)
 # define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
 # define PAGE_SIZE	4096
 
-
-
-	.section .text.evex, "ax", @progbits
+	.section SECTION(.text), "ax", @progbits
 ENTRY(STRRCHR)
 	movl	%edi, %eax
 	/* Broadcast CHAR to VMATCH.  */
@@ -88,17 +79,17 @@ ENTRY(STRRCHR)
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
 	jg	L(cross_page_boundary)
 
-	VMOVU	(%rdi), %VEC(1)
+	VMOVU	(%rdi), %VMM(1)
 	/* k0 has a 1 for each zero CHAR in VEC(1).  */
-	VPTESTN	%VEC(1), %VEC(1), %k0
-	kmovV	%k0, %VRSI
+	VPTESTN	%VMM(1), %VMM(1), %k0
+	KMOV	%k0, %VRSI
 	test	%VRSI, %VRSI
 	jz	L(aligned_more)
 	/* fallthrough: zero CHAR in first VEC.  */
 L(page_cross_return):
 	/* K1 has a 1 for each search CHAR match in VEC(1).  */
-	VPCMPEQ	%VMATCH, %VEC(1), %k1
-	kmovV	%k1, %VRAX
+	VPCMPEQ	%VMATCH, %VMM(1), %k1
+	KMOV	%k1, %VRAX
 	/* Build mask up until first zero CHAR (used to mask of
 	   potential search CHAR matches past the end of the string).
 	 */
@@ -120,8 +111,8 @@ L(ret0):
 	   search path for earlier matches.  */
 	.p2align 4,, 6
 L(first_vec_x1):
-	VPCMPEQ	%VMATCH, %VEC(2), %k1
-	kmovV	%k1, %VRAX
+	VPCMPEQ	%VMATCH, %VMM(2), %k1
+	KMOV	%k1, %VRAX
 	blsmsk	%VRCX, %VRCX
 	/* eax non-zero if search CHAR in range.  */
 	and	%VRCX, %VRAX
@@ -131,8 +122,8 @@ L(first_vec_x1):
 	   earlier matches (in VEC(1)).  */
 	.p2align 4,, 4
 L(first_vec_x0_test):
-	VPCMPEQ	%VMATCH, %VEC(1), %k1
-	kmovV	%k1, %VRAX
+	VPCMPEQ	%VMATCH, %VMM(1), %k1
+	KMOV	%k1, %VRAX
 	test	%VRAX, %VRAX
 	jz	L(ret1)
 	bsr	%VRAX, %VRAX
@@ -146,11 +137,11 @@ L(ret1):
 
 	.p2align 4,, 10
 L(first_vec_x1_or_x2):
-	VPCMPEQ	%VEC(3), %VMATCH, %k3
-	VPCMPEQ	%VEC(2), %VMATCH, %k2
+	VPCMPEQ	%VMM(3), %VMATCH, %k3
+	VPCMPEQ	%VMM(2), %VMATCH, %k2
 	/* K2 and K3 have 1 for any search CHAR match. Test if any
 	   matches between either of them. Otherwise check VEC(1).  */
-	kortestV %k2, %k3
+	KORTEST %k2, %k3
 	jz	L(first_vec_x0_test)
 
 	/* Guranteed that VEC(2) and VEC(3) are within range so merge
@@ -163,8 +154,8 @@ L(first_vec_x1_or_x2):
 
 	.p2align 4,, 7
 L(first_vec_x3):
-	VPCMPEQ	%VMATCH, %VEC(4), %k1
-	kmovV	%k1, %VRAX
+	VPCMPEQ	%VMATCH, %VMM(4), %k1
+	KMOV	%k1, %VRAX
 	blsmsk	%VRCX, %VRCX
 	/* If no search CHAR match in range check VEC(1)/VEC(2)/VEC(3).
 	 */
@@ -177,8 +168,8 @@ L(first_vec_x3):
 
 	.p2align 4,, 6
 L(first_vec_x0_x1_test):
-	VPCMPEQ	%VMATCH, %VEC(2), %k1
-	kmovV	%k1, %VRAX
+	VPCMPEQ	%VMATCH, %VMM(2), %k1
+	KMOV	%k1, %VRAX
 	/* Check VEC(2) for last match first. If no match try VEC(1).
 	 */
 	test	%VRAX, %VRAX
@@ -192,8 +183,8 @@ L(first_vec_x1_return):
 
 	.p2align 4,, 10
 L(first_vec_x2):
-	VPCMPEQ	%VMATCH, %VEC(3), %k1
-	kmovV	%k1, %VRAX
+	VPCMPEQ	%VMATCH, %VMM(3), %k1
+	KMOV	%k1, %VRAX
 	blsmsk	%VRCX, %VRCX
 	/* Check VEC(3) for last match first. If no match try
 	   VEC(2)/VEC(1).  */
@@ -212,23 +203,23 @@ L(page_cross_continue):
 	movq	%rdi, %rsi
 	andq	$-VEC_SIZE, %rdi
 
-	VMOVU	VEC_SIZE(%rdi), %VEC(2)
-	VPTESTN	%VEC(2), %VEC(2), %k0
-	kmovV	%k0, %VRCX
+	VMOVU	VEC_SIZE(%rdi), %VMM(2)
+	VPTESTN	%VMM(2), %VMM(2), %k0
+	KMOV	%k0, %VRCX
 
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x1)
 
-	VMOVU	(VEC_SIZE * 2)(%rdi), %VEC(3)
-	VPTESTN	%VEC(3), %VEC(3), %k0
-	kmovV	%k0, %VRCX
+	VMOVU	(VEC_SIZE * 2)(%rdi), %VMM(3)
+	VPTESTN	%VMM(3), %VMM(3), %k0
+	KMOV	%k0, %VRCX
 
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x2)
 
-	VMOVU	(VEC_SIZE * 3)(%rdi), %VEC(4)
-	VPTESTN	%VEC(4), %VEC(4), %k0
-	kmovV	%k0, %VRCX
+	VMOVU	(VEC_SIZE * 3)(%rdi), %VMM(4)
+	VPTESTN	%VMM(4), %VMM(4), %k0
+	KMOV	%k0, %VRCX
 	movq	%rdi, %r8
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x3)
@@ -238,36 +229,36 @@ L(page_cross_continue):
 L(first_aligned_loop):
 	/* Preserve VEC(1), VEC(2), VEC(3), and VEC(4) until we can
 	   gurantee they don't store a match.  */
-	VMOVA	(VEC_SIZE * 4)(%rdi), %VEC(5)
-	VMOVA	(VEC_SIZE * 5)(%rdi), %VEC(6)
+	VMOVA	(VEC_SIZE * 4)(%rdi), %VMM(5)
+	VMOVA	(VEC_SIZE * 5)(%rdi), %VMM(6)
 
-	VPCMPEQ	%VEC(5), %VMATCH, %k2
-	vpxord	%VEC(6), %VMATCH, %VEC(7)
+	VPCMPEQ	%VMM(5), %VMATCH, %k2
+	vpxord	%VMM(6), %VMATCH, %VMM(7)
 
-	VPMIN	%VEC(5), %VEC(6), %VEC(8)
-	VPMIN	%VEC(8), %VEC(7), %VEC(7)
+	VPMIN	%VMM(5), %VMM(6), %VMM(8)
+	VPMIN	%VMM(8), %VMM(7), %VMM(7)
 
-	VPTESTN	%VEC(7), %VEC(7), %k1
+	VPTESTN	%VMM(7), %VMM(7), %k1
 	subq	$(VEC_SIZE * -2), %rdi
-	kortestV %k1, %k2
+	KORTEST %k1, %k2
 	jz	L(first_aligned_loop)
 
-	VPCMPEQ	%VEC(6), %VMATCH, %k3
-	VPTESTN	%VEC(8), %VEC(8), %k1
+	VPCMPEQ	%VMM(6), %VMATCH, %k3
+	VPTESTN	%VMM(8), %VMM(8), %k1
 
 	/* If k1 is zero, then we found a CHAR match but no null-term.
 	   We can now safely throw out VEC1-4.  */
-	ktestV	%k1, %k1
+	KTEST	%k1, %k1
 	jz	L(second_aligned_loop_prep)
 
-	kortestV %k2, %k3
+	KORTEST %k2, %k3
 	jnz	L(return_first_aligned_loop)
 
 
 	.p2align 4,, 6
 L(first_vec_x1_or_x2_or_x3):
-	VPCMPEQ	%VEC(4), %VMATCH, %k4
-	kmovV	%k4, %VRAX
+	VPCMPEQ	%VMM(4), %VMATCH, %k4
+	KMOV	%k4, %VRAX
 	bsr	%VRAX, %VRAX
 	jz	L(first_vec_x1_or_x2)
 	leaq	(VEC_SIZE * 3)(%r8, %rax, CHAR_SIZE), %rax
@@ -276,7 +267,7 @@ L(first_vec_x1_or_x2_or_x3):
 
 	.p2align 4,, 8
 L(return_first_aligned_loop):
-	VPTESTN	%VEC(5), %VEC(5), %k0
+	VPTESTN	%VMM(5), %VMM(5), %k0
 
 	/* Combined results from VEC5/6.  */
 	kunpck_2x %k0, %k1, %k0
@@ -301,41 +292,41 @@ L(second_aligned_loop_set_furthest_match):
 	movq	%rdi, %rsi
 	/* Ideally we would safe k2/k3 but `kmov/kunpck` take uops on
 	   port0 and have noticable overhead in the loop.  */
-	VMOVA	%VEC(5), %VEC(7)
-	VMOVA	%VEC(6), %VEC(8)
+	VMOVA	%VMM(5), %VMM(7)
+	VMOVA	%VMM(6), %VMM(8)
 	.p2align 4
 L(second_aligned_loop):
-	VMOVU	(VEC_SIZE * 4)(%rdi), %VEC(5)
-	VMOVU	(VEC_SIZE * 5)(%rdi), %VEC(6)
-	VPCMPEQ	%VEC(5), %VMATCH, %k2
-	vpxord	%VEC(6), %VMATCH, %VEC(3)
+	VMOVU	(VEC_SIZE * 4)(%rdi), %VMM(5)
+	VMOVU	(VEC_SIZE * 5)(%rdi), %VMM(6)
+	VPCMPEQ	%VMM(5), %VMATCH, %k2
+	vpxord	%VMM(6), %VMATCH, %VMM(3)
 
-	VPMIN	%VEC(5), %VEC(6), %VEC(4)
-	VPMIN	%VEC(3), %VEC(4), %VEC(3)
+	VPMIN	%VMM(5), %VMM(6), %VMM(4)
+	VPMIN	%VMM(3), %VMM(4), %VMM(3)
 
-	VPTESTN	%VEC(3), %VEC(3), %k1
+	VPTESTN	%VMM(3), %VMM(3), %k1
 	subq	$(VEC_SIZE * -2), %rdi
-	kortestV %k1, %k2
+	KORTEST %k1, %k2
 	jz	L(second_aligned_loop)
-	VPCMPEQ	%VEC(6), %VMATCH, %k3
-	VPTESTN	%VEC(4), %VEC(4), %k1
-	ktestV	%k1, %k1
+	VPCMPEQ	%VMM(6), %VMATCH, %k3
+	VPTESTN	%VMM(4), %VMM(4), %k1
+	KTEST	%k1, %k1
 	jz	L(second_aligned_loop_set_furthest_match)
 
 	/* branch here because we know we have a match in VEC7/8 but
 	   might not in VEC5/6 so the latter is expected to be less
 	   likely.  */
-	kortestV %k2, %k3
+	KORTEST %k2, %k3
 	jnz	L(return_new_match)
 
 L(return_old_match):
-	VPCMPEQ	%VEC(8), %VMATCH, %k0
-	kmovV	%k0, %VRCX
+	VPCMPEQ	%VMM(8), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 	bsr	%VRCX, %VRCX
 	jnz	L(return_old_match_ret)
 
-	VPCMPEQ	%VEC(7), %VMATCH, %k0
-	kmovV	%k0, %VRCX
+	VPCMPEQ	%VMM(7), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 	bsr	%VRCX, %VRCX
 	subq	$VEC_SIZE, %rsi
 L(return_old_match_ret):
@@ -344,7 +335,7 @@ L(return_old_match_ret):
 
 	.p2align 4,, 10
 L(return_new_match):
-	VPTESTN	%VEC(5), %VEC(5), %k0
+	VPTESTN	%VMM(5), %VMM(5), %k0
 
 	/* Combined results from VEC5/6.  */
 	kunpck_2x %k0, %k1, %k0
@@ -366,9 +357,9 @@ L(return_new_match):
 L(cross_page_boundary):
 	xorq	%rdi, %rax
 	mov	$-1, %VRDX
-	VMOVU	(PAGE_SIZE - VEC_SIZE)(%rax), %VEC(6)
-	VPTESTN	%VEC(6), %VEC(6), %k0
-	kmovV	%k0, %VRSI
+	VMOVU	(PAGE_SIZE - VEC_SIZE)(%rax), %VMM(6)
+	VPTESTN	%VMM(6), %VMM(6), %k0
+	KMOV	%k0, %VRSI
 
 # ifdef USE_AS_WCSRCHR
 	movl	%edi, %ecx
@@ -380,13 +371,13 @@ L(cross_page_boundary):
 # ifdef USE_AS_WCSRCHR
 	kmovb	%edx, %k1
 # else
-	kmovV	%VRDX, %k1
+	KMOV	%VRDX, %k1
 # endif
 
 	/* Need to adjust result to VEC(1) so it can be re-used by
 	   L(return_vec_x0_test).  The alternative is to collect VEC(1)
 	   will a page cross load which is far more expensive.  */
-	VPCOMPRESS %VEC(6), %VEC(1){%k1}{z}
+	VPCOMPRESS %VMM(6), %VMM(1){%k1}{z}
 
 	/* We could technically just jmp back after the vpcompress but
 	   it doesn't save any 16-byte blocks.  */
@@ -396,8 +387,8 @@ L(cross_page_boundary):
 
 	/* Duplicate of return logic from ENTRY. Doesn't cause spill to
 	   next cache line so might as well copy it here.  */
-	VPCMPEQ	%VMATCH, %VEC(1), %k1
-	kmovV	%k1, %VRAX
+	VPCMPEQ	%VMATCH, %VMM(1), %k1
+	KMOV	%k1, %VRAX
 	blsmsk	%VRSI, %VRSI
 	and	%VRSI, %VRAX
 	jz	L(ret_page_cross)

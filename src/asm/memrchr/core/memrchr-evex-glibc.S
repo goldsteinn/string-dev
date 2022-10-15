@@ -33,7 +33,7 @@
 # endif
 
 # define PAGE_SIZE	4096
-# define VECMATCH	VEC(0)
+# define VMATCH	VMM(0)
 
 	.section SECTION(.text), "ax", @progbits
 ENTRY_P2ALIGN(MEMRCHR, 6)
@@ -49,7 +49,7 @@ ENTRY_P2ALIGN(MEMRCHR, 6)
 	   necessary for a correct page cross check and 2) it correctly
 	   sets up end ptr to be subtract by lzcnt aligned.  */
 	leaq	-1(%rdi, %rdx), %rax
-	vpbroadcastb %esi, %VECMATCH
+	vpbroadcastb %esi, %VMATCH
 
 	/* Check if we can load 1x VEC without cross a page.  */
 	testl	$(PAGE_SIZE - VEC_SIZE), %eax
@@ -57,7 +57,7 @@ ENTRY_P2ALIGN(MEMRCHR, 6)
 
 	/* Don't use rax for pointer here because EVEX has better
 	   encoding with offset % VEC_SIZE == 0.  */
-	vpcmpb	$0, -(VEC_SIZE)(%rdi, %rdx), %VECMATCH, %k0
+	vpcmpb	$0, -(VEC_SIZE)(%rdi, %rdx), %VMATCH, %k0
 	kmovd	%k0, %ecx
 
 	/* Fall through for rdx (len) <= VEC_SIZE (expect small sizes).
@@ -99,7 +99,7 @@ L(more_1x_vec):
 	movq	%rax, %rdx
 
 	/* Need no matter what.  */
-	vpcmpb	$0, -(VEC_SIZE)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, -(VEC_SIZE)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 
 	subq	%rdi, %rdx
@@ -118,7 +118,7 @@ L(last_2x_vec):
 
 	/* Don't use rax for pointer here because EVEX has better
 	   encoding with offset % VEC_SIZE == 0.  */
-	vpcmpb	$0, -(VEC_SIZE * 2)(%rdi, %rdx), %VECMATCH, %k0
+	vpcmpb	$0, -(VEC_SIZE * 2)(%rdi, %rdx), %VMATCH, %k0
 	kmovd	%k0, %ecx
 	/* NB: 64-bit lzcnt. This will naturally add 32 to position.  */
 	lzcntq	%rcx, %rcx
@@ -134,7 +134,7 @@ L(last_2x_vec):
 L(page_cross):
 	movq	%rax, %rsi
 	andq	$-VEC_SIZE, %rsi
-	vpcmpb	$0, (%rsi), %VECMATCH, %k0
+	vpcmpb	$0, (%rsi), %VMATCH, %k0
 	kmovd	%k0, %r8d
 	/* Shift out negative alignment (because we are starting from
 	   endptr and working backwards).  */
@@ -170,13 +170,13 @@ L(more_2x_vec):
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x0_dec)
 
-	vpcmpb	$0, -(VEC_SIZE * 2)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, -(VEC_SIZE * 2)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x1)
 
 	/* Need no matter what.  */
-	vpcmpb	$0, -(VEC_SIZE * 3)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, -(VEC_SIZE * 3)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 
 	subq	$(VEC_SIZE * 4), %rdx
@@ -190,7 +190,7 @@ L(last_vec):
 
 
 	/* Need no matter what.  */
-	vpcmpb	$0, -(VEC_SIZE * 4)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, -(VEC_SIZE * 4)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 	lzcntl	%ecx, %ecx
 	subq	$(VEC_SIZE * 3 + 1), %rax
@@ -225,7 +225,7 @@ L(more_4x_vec):
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x2)
 
-	vpcmpb	$0, -(VEC_SIZE * 4)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, -(VEC_SIZE * 4)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 
 	testl	%ecx, %ecx
@@ -250,18 +250,18 @@ L(more_4x_vec):
 L(loop_4x_vec):
 	/* Store 1 were not-equals and 0 where equals in k1 (used to
 	   mask later on).  */
-	vpcmpb	$4, (VEC_SIZE * 3)(%rax), %VECMATCH, %k1
+	vpcmpb	$4, (VEC_SIZE * 3)(%rax), %VMATCH, %k1
 
 	/* VEC(2/3) will have zero-byte where we found a CHAR.  */
-	vpxorq	(VEC_SIZE * 2)(%rax), %VECMATCH, %VEC(2)
-	vpxorq	(VEC_SIZE * 1)(%rax), %VECMATCH, %VEC(3)
-	vpcmpb	$0, (VEC_SIZE * 0)(%rax), %VECMATCH, %k4
+	vpxorq	(VEC_SIZE * 2)(%rax), %VMATCH, %VMM(2)
+	vpxorq	(VEC_SIZE * 1)(%rax), %VMATCH, %VMM(3)
+	vpcmpb	$0, (VEC_SIZE * 0)(%rax), %VMATCH, %k4
 
 	/* Combine VEC(2/3) with min and maskz with k1 (k1 has zero bit
 	   where CHAR is found and VEC(2/3) have zero-byte where CHAR
 	   is found.  */
-	vpminub	%VEC(2), %VEC(3), %VEC(3){%k1}{z}
-	vptestnmb %VEC(3), %VEC(3), %k2
+	vpminub	%VMM(2), %VMM(3), %VMM(3){%k1}{z}
+	vptestnmb %VMM(3), %VMM(3), %k2
 
 	/* Any 1s and we found CHAR.  */
 	kortestd %k2, %k4
@@ -278,7 +278,7 @@ L(loop_4x_vec):
 L(last_4x_vec):
 
 	/* Used no matter what.  */
-	vpcmpb	$0, (VEC_SIZE * -1)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, (VEC_SIZE * -1)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 
 	cmpl	$(VEC_SIZE * 2), %edx
@@ -288,14 +288,14 @@ L(last_4x_vec):
 	jnz	L(ret_vec_x0_dec)
 
 
-	vpcmpb	$0, (VEC_SIZE * -2)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, (VEC_SIZE * -2)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x1)
 
 	/* Used no matter what.  */
-	vpcmpb	$0, (VEC_SIZE * -3)(%rax), %VECMATCH, %k0
+	vpcmpb	$0, (VEC_SIZE * -3)(%rax), %VMATCH, %k0
 	kmovd	%k0, %ecx
 
 	cmpl	$(VEC_SIZE * 3), %edx
@@ -317,7 +317,7 @@ L(loop_end):
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x0_end)
 
-	vptestnmb %VEC(2), %VEC(2), %k0
+	vptestnmb %VMM(2), %VMM(2), %k0
 	kmovd	%k0, %ecx
 	testl	%ecx, %ecx
 	jnz	L(ret_vec_x1_end)

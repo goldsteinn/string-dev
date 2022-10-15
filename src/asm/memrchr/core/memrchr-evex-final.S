@@ -30,7 +30,7 @@
 # endif
 
 # define PAGE_SIZE	4096
-# define VECMATCH	VEC(0)
+# define VMATCH	VMM(0)
 
 	.section SECTION(.text), "ax", @progbits
 ENTRY_P2ALIGN(MEMRCHR, 6)
@@ -47,7 +47,7 @@ ENTRY_P2ALIGN(MEMRCHR, 6)
 	   sets up end ptr to be subtract by lzcnt aligned. 3) it is a
 	   necessary step in aligning ptr.  */
 	leaq	-1(%rdi, %rdx), %rax
-	vpbroadcastb %esi, %VECMATCH
+	vpbroadcastb %esi, %VMATCH
 
 	/* Check if we can load 1x VEC without cross a page.  */
 	testl	$(PAGE_SIZE - VEC_SIZE), %eax
@@ -55,8 +55,8 @@ ENTRY_P2ALIGN(MEMRCHR, 6)
 
 	/* Don't use rax for pointer here because EVEX has better
 	   encoding with offset % VEC_SIZE == 0.  */
-	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rdx), %VECMATCH, %k0
-	kmovV	%k0, %VRCX
+	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rdx), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 
 	/* If rcx is zero then lzcnt -> VEC_SIZE.  NB: there is a
 	   already a dependency between rcx and rsi so no worries about
@@ -80,8 +80,9 @@ ENTRY_P2ALIGN(MEMRCHR, 6)
 	subq	%rsi, %rax
 	ret
 
+	/* Fits in aligning bytes of first cache line for VEC_SIZE ==
+	   32.  */
 # if VEC_SIZE == 32
-	/* Fits in aligning bytes of first cache line.  */
 	.p2align 4,, 2
 L(zero_0):
 	xorl	%eax, %eax
@@ -100,8 +101,8 @@ L(page_cross_continue):
 	ja	L(more_2x_vec)
 
 L(last_2x_vec):
-	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VECMATCH, %k0
-	kmovV	%k0, %VRCX
+	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 
 	test	%VRCX, %VRCX
 	jnz	L(ret_vec_x0_test)
@@ -115,28 +116,32 @@ L(last_2x_vec):
 # endif
 	jle	L(zero_2)
 
-	/* Don't use rax for pointer here because EVEX has better
-	   encoding with offset % VEC_SIZE == 0.  */
+	/* We adjusted rax (length) for VEC_SIZE == 64 so need seperate
+	   offsets.  */
 # if VEC_SIZE == 64
-	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VECMATCH, %k0
+	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VMATCH, %k0
 # else
-	vpcmpeqb (VEC_SIZE * -2)(%rdi, %rax), %VECMATCH, %k0
+	vpcmpeqb (VEC_SIZE * -2)(%rdi, %rax), %VMATCH, %k0
 # endif
-	kmovV	%k0, %VRCX
+	KMOV	%k0, %VRCX
 	/* NB: 64-bit lzcnt. This will naturally add 32 to position for
 	   VEC_SIZE == 32.  */
 	lzcntq	%rcx, %rcx
 	subl	%ecx, %eax
 	ja	L(first_vec_x1_ret)
-# if VEC_SIZE != 32
+	/* If VEC_SIZE == 64 put L(zero_0) here as we can't fit in the
+	   first cache line (this is the second cache line).  */
+# if VEC_SIZE == 64
 L(zero_0):
 # endif
 L(zero_2):
 	xorl	%eax, %eax
 	ret
 
+	/* NB: Fits in aligning bytes before next cache line for
+	   VEC_SIZE == 32.  For VEC_SIZE == 64 this is attached to
+	   L(first_vec_x0_test).  */
 # if VEC_SIZE == 32
-	/* NB: Fits in aligning bytes before next cache line.  */
 L(first_vec_x1_ret):
 	leaq	-1(%rdi, %rax), %rax
 	ret
@@ -147,7 +152,10 @@ L(ret_vec_x0_test):
 	lzcnt	%VRCX, %VRCX
 	subl	%ecx, %eax
 	jle	L(zero_2)
-# if VEC_SIZE != 32
+# if VEC_SIZE == 64
+	/* Reuse code at the end of L(ret_vec_x0_test) as we can't fit
+	   L(first_vec_x1_ret) in the same cache line as its jmp base
+	   so we might as well save code size.  */
 L(first_vec_x1_ret):
 # endif
 	leaq	-1(%rdi, %rax), %rax
@@ -161,26 +169,28 @@ L(last_4x_vec):
 	cmpl	$(VEC_SIZE * 2), %eax
 	jle	L(last_2x_vec)
 # if VEC_SIZE == 32
+	/* Only align for VEC_SIZE == 32.  For VEC_SIZE == 64 we need
+	   the spare bytes to align the loop properly.  */
 	.p2align 4,, 10
 # endif
 L(more_2x_vec):
 
 	/* Length > VEC_SIZE * 2 so check the first 2x VEC for match and
 	   return if either hit.  */
-	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VECMATCH, %k0
-	kmovV	%k0, %VRCX
+	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x0)
 
-	vpcmpeqb (VEC_SIZE * -2)(%rdi, %rax), %VECMATCH, %k0
-	kmovV	%k0, %VRCX
+	vpcmpeqb (VEC_SIZE * -2)(%rdi, %rax), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x1)
 
 	/* Need no matter what.  */
-	vpcmpeqb (VEC_SIZE * -3)(%rdi, %rax), %VECMATCH, %k0
-	kmovV	%k0, %VRCX
+	vpcmpeqb (VEC_SIZE * -3)(%rdi, %rax), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 
 	/* Check if we are near the end.  */
 	subq	$(VEC_SIZE * 4), %rax
@@ -194,8 +204,8 @@ L(more_2x_vec):
 	addl	$(VEC_SIZE * 1), %eax
 	jle	L(zero_1)
 
-	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VECMATCH, %k0
-	kmovV	%k0, %VRCX
+	vpcmpeqb (VEC_SIZE * -1)(%rdi, %rax), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 
 	lzcnt	%VRCX, %VRCX
 	subl	%ecx, %eax
@@ -256,8 +266,8 @@ L(more_4x_vec):
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x2)
 
-	vpcmpeqb (%rdi, %rax), %VECMATCH, %k0
-	kmovV	%k0, %VRCX
+	vpcmpeqb (%rdi, %rax), %VMATCH, %k0
+	KMOV	%k0, %VRCX
 
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x3)
@@ -303,49 +313,52 @@ L(loop_4x_vec):
 	je	L(loop_last_4x_vec)
 	/* Store 1 were not-equals and 0 where equals in k1 (used to
 	   mask later on).  */
-	vpcmpb	$4, (VEC_SIZE * -1)(%rax), %VECMATCH, %k1
+	vpcmpb	$4, (VEC_SIZE * -1)(%rax), %VMATCH, %k1
 
 	/* VEC(2/3) will have zero-byte where we found a CHAR.  */
-	vpxorq	(VEC_SIZE * -2)(%rax), %VECMATCH, %VEC(2)
-	vpxorq	(VEC_SIZE * -3)(%rax), %VECMATCH, %VEC(3)
-	vpcmpeqb (VEC_SIZE * -4)(%rax), %VECMATCH, %k4
+	vpxorq	(VEC_SIZE * -2)(%rax), %VMATCH, %VMM(2)
+	vpxorq	(VEC_SIZE * -3)(%rax), %VMATCH, %VMM(3)
+	vpcmpeqb (VEC_SIZE * -4)(%rax), %VMATCH, %k4
 
 	/* Combine VEC(2/3) with min and maskz with k1 (k1 has zero bit
 	   where CHAR is found and VEC(2/3) have zero-byte where CHAR
 	   is found.  */
-	vpminub	%VEC(2), %VEC(3), %VEC(3){%k1}{z}
-	vptestnmb %VEC(3), %VEC(3), %k2
+	vpminub	%VMM(2), %VMM(3), %VMM(3){%k1}{z}
+	vptestnmb %VMM(3), %VMM(3), %k2
 
 	addq	$-(VEC_SIZE * 4), %rax
 
 	/* Any 1s and we found CHAR.  */
-	kortestV %k2, %k4
+	KORTEST %k2, %k4
 	jz	L(loop_4x_vec)
 
 
 	/* K1 has non-matches for first VEC. inc; jz will overflow rcx
 	   iff all bytes where non-matches.  */
-	kmovV	%k1, %VRCX
+	KMOV	%k1, %VRCX
 	inc	%VRCX
 	jnz	L(first_vec_x0_end)
 
-	vptestnmb %VEC(2), %VEC(2), %k0
-	kmovV	%k0, %VRCX
+	vptestnmb %VMM(2), %VMM(2), %k0
+	KMOV	%k0, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x1_end)
-	kmovV	%k2, %VRCX
+	KMOV	%k2, %VRCX
 
-
+	/* Seperate logic for VEC_SIZE == 64 and VEC_SIZE == 32 for
+	   returning last 2x VEC. For VEC_SIZE == 64 we test each VEC
+	   individually, for VEC_SIZE == 32 we combine them in a single
+	   64-bit GPR.  */
 # if VEC_SIZE == 64
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x2_end)
-	kmovV	%k4, %VRCX
+	KMOV	%k4, %VRCX
 # else
 	/* Combine last 2 VEC matches for VEC_SIZE == 32. If rcx (from
 	   VEC(3)) is zero (no CHAR in VEC(3)) then it won't affect the
 	   result in rsi (from VEC(4)). If rcx is non-zero then CHAR in
 	   VEC(3) and bsrq will use that position.  */
-	kmovV	%k4, %VRSI
+	KMOV	%k4, %VRSI
 	salq	$32, %rcx
 	orq	%rsi, %rcx
 # endif
@@ -387,8 +400,8 @@ L(page_cross):
 	 */
 	movzbl	%al, %ecx
 	andq	$-VEC_SIZE, %rax
-	vpcmpeqb (%rax), %VECMATCH, %k0
-	kmovV	%k0, %VRSI
+	vpcmpeqb (%rax), %VMATCH, %k0
+	KMOV	%k0, %VRSI
 
 	/* eax was comptued as %rdi + %rdx - 1 so need to add back 1
 	   here.  */

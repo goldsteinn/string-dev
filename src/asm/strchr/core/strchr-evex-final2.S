@@ -31,7 +31,6 @@
 # define VMOVA	vmovdqa64
 
 # ifdef USE_AS_WCSCHR
-#  define REG_WIDTH	32
 #  define VPBROADCAST	vpbroadcastd
 #  define VPCMP	vpcmpd
 #  define VPCMPEQ	vpcmpeqd
@@ -39,10 +38,10 @@
 #  define VPTEST	vptestmd
 #  define VPMINU	vpminud
 #  define CHAR_REG	esi
-#  define SHIFT_REG	ecx
+#  define SHIFT_REG	rcx
 #  define CHAR_SIZE	4
+#  define USE_WIDE_CHAR
 # else
-#  define REG_WIDTH	VEC_SIZE
 #  define VPBROADCAST	vpbroadcastb
 #  define VPCMP	vpcmpb
 #  define VPCMPEQ	vpcmpeqb
@@ -50,7 +49,7 @@
 #  define VPTEST	vptestmb
 #  define VPMINU	vpminub
 #  define CHAR_REG	sil
-#  define SHIFT_REG	edi
+#  define SHIFT_REG	rdi
 #  define CHAR_SIZE	1
 # endif
 
@@ -85,7 +84,7 @@
 #  define LAST_VEC_OFFSET	(VEC_SIZE * 2)
 # endif
 
-# define VMATCH	VEC(0)
+# define VMATCH	VMM(0)
 
 # include "../../libc-defs/libc-reg-macros.h"
 
@@ -108,13 +107,13 @@ ENTRY_P2ALIGN(STRCHR, 6)
 	   null bytes.  */
 	VMOVU	(%rdi), %ymm1
 	/* Leaves only CHARS matching esi as 0.  */
-	// vpxorq  %VEC(1), %VMATCH, %VEC(2)
-	// VPMINU  %VEC(2), %VEC(1), %VEC(2)
+	// vpxorq  %VMM(1), %VMATCH, %VMM(2)
+	// VPMINU  %VMM(2), %VMM(1), %VMM(2)
 	/* Each bit in K0 represents a CHAR or a null byte in VEC_1.  */
-	// VPTESTN %VEC(2), %VEC(2), %k0
+	// VPTESTN %VMM(2), %VMM(2), %k0
 	vpcmpeqb %ymm1, %ymm0, %ymm2
 	vpcmpleb %ymm1, %ymm2, %k0
-	kmovV	%k0, %VRAX
+	KMOV	%k0, %VRAX
 # if VEC_SIZE == 64 && defined USE_AS_STRCHRNUL
 	/* If VEC_SIZE == 64 && STRCHRNUL use bsf to test condition so
 	   that all logic for match/null in first VEC first in 1x cache
@@ -157,7 +156,16 @@ L(zero):
 	ret
 # endif
 
-	.p2align 4,, 2
+# ifdef USE_AS_STRCHRNUL
+	/* We use this as a hook to get imm8 encoding for the jmp to
+	   L(page_cross_boundary).  This allows the hot case of a
+	   match/null-term in first VEC to fit entirely in 1 cache
+	   line.  */
+L(cross_page_boundary):
+	jmp	L(cross_page_boundary_real)
+# endif
+
+	.p2align 4,, 8
 L(first_vec_x3):
 	subq	$-(VEC_SIZE * 2), %rdi
 # if VEC_SIZE == 32
@@ -183,16 +191,16 @@ L(first_vec_x4):
 L(first_vec_x2):
 # ifndef USE_AS_STRCHRNUL
 	/* Check to see if first match was CHAR (k0) or null (k1).  */
-	kmovV	%k0, %VRAX
+	KMOV	%k0, %VRAX
 	tzcnt	%VRAX, %VRAX
-	kmovV	%k1, %VRCX
+	KMOV	%k1, %VRCX
 	/* bzhil will not be 0 if first match was null.  */
 	bzhi	%VRAX, %VRCX, %VRCX
 	jne	L(zero)
 # else
 	/* Combine CHAR and null matches.  */
-	korV	%k0, %k1, %k0
-	kmovV	%k0, %VRAX
+	KOR	%k0, %k1, %k0
+	KMOV	%k0, %VRAX
 	bsf	%VRAX, %VRAX
 # endif
 	/* NB: Multiply sizeof char type (1 or 4) to get the number of
@@ -200,16 +208,7 @@ L(first_vec_x2):
 	leaq	(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %rax
 	ret
 
-# ifdef USE_AS_STRCHRNUL
-	/* We use this as a hook to get imm8 encoding for the jmp to
-	   L(page_cross_boundary).  This allows the hot case of a
-	   match/null-term in first VEC to fit entirely in 1 cache
-	   line.  */
-L(cross_page_boundary):
-	jmp	L(cross_page_boundary_real)
-# endif
-
-	.p2align 4
+	.p2align 4,, 10
 L(aligned_more):
 L(cross_page_continue):
 	VMOVU	%ymm0, %ymm16
@@ -229,13 +228,13 @@ L(cross_page_continue):
 	   For VEC_SIZE == 64:
 	   p0 * 2.50, p1 * 0.00, p5 * 1.50  */
 // abf-on
-	VMOVA	(VEC_SIZE)(%rdi), %VEC(1)
+	VMOVA	(VEC_SIZE)(%rdi), %VMM(1)
 	/* Leaves only CHARS matching esi as 0.  */
-	vpxorq	%VEC(1), %VMATCH, %VEC(2)
-	VPMINU	%VEC(2), %VEC(1), %VEC(2)
+	vpxorq	%VMM(1), %VMATCH, %VMM(2)
+	VPMINU	%VMM(2), %VMM(1), %VMM(2)
 	/* Each bit in K0 represents a CHAR or a null byte in VEC_1.  */
-	VPTESTN	%VEC(2), %VEC(2), %k0
-	kmovV	%k0, %VRCX
+	VPTESTN	%VMM(2), %VMM(2), %k0
+	KMOV	%k0, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x1)
 
@@ -247,33 +246,33 @@ L(cross_page_continue):
 	   p0 * 1.00, p1 * 0.00, p5 * 2.00  */
 // abf-on
 
-	VMOVA	(VEC_SIZE * 2)(%rdi), %VEC(1)
+	VMOVA	(VEC_SIZE * 2)(%rdi), %VMM(1)
 	/* Each bit in K0 represents a CHAR in VEC_1.  */
-	VPCMPEQ	%VEC(1), %VMATCH, %k0
+	VPCMPEQ	%VMM(1), %VMATCH, %k0
 	/* Each bit in K1 represents a CHAR in VEC_1.  */
-	VPTESTN	%VEC(1), %VEC(1), %k1
-	kortestV %k0, %k1
+	VPTESTN	%VMM(1), %VMM(1), %k1
+	KORTEST	%k0, %k1
 	jnz	L(first_vec_x2)
 
 	/* By swapping between Method 1/2 we get more fair port
 	   distrubition and better throughput.  */
 
-	VMOVA	(VEC_SIZE * 3)(%rdi), %VEC(1)
+	VMOVA	(VEC_SIZE * 3)(%rdi), %VMM(1)
 	/* Leaves only CHARS matching esi as 0.  */
-	vpxorq	%VEC(1), %VMATCH, %VEC(2)
-	VPMINU	%VEC(2), %VEC(1), %VEC(2)
+	vpxorq	%VMM(1), %VMATCH, %VMM(2)
+	VPMINU	%VMM(2), %VMM(1), %VMM(2)
 	/* Each bit in K0 represents a CHAR or a null byte in VEC_1.  */
-	VPTESTN	%VEC(2), %VEC(2), %k0
-	kmovV	%k0, %VRCX
+	VPTESTN	%VMM(2), %VMM(2), %k0
+	KMOV	%k0, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x3)
 
-	VMOVA	(VEC_SIZE * 4)(%rdi), %VEC(1)
+	VMOVA	(VEC_SIZE * 4)(%rdi), %VMM(1)
 	/* Each bit in K0 represents a CHAR in VEC_1.  */
-	VPCMPEQ	%VEC(1), %VMATCH, %k0
+	VPCMPEQ	%VMM(1), %VMATCH, %k0
 	/* Each bit in K1 represents a CHAR in VEC_1.  */
-	VPTESTN	%VEC(1), %VEC(1), %k1
-	kortestV %k0, %k1
+	VPTESTN	%VMM(1), %VMM(1), %k1
+	KORTEST	%k0, %k1
 	jnz	L(first_vec_x4)
 
 	/* Align data to VEC_SIZE * 4 for the loop.  */
@@ -294,15 +293,15 @@ L(cross_page_continue):
 L(loop_4x_vec):
 	/* Check 4x VEC at a time. No penalty for imm32 offset with evex
 	   encoding (if offset % VEC_SIZE == 0).  */
-	VMOVA	(VEC_SIZE * 4)(%LOOP_REG), %VEC(1)
-	VMOVA	(VEC_SIZE * 5)(%LOOP_REG), %VEC(2)
-	VMOVA	(VEC_SIZE * 6)(%LOOP_REG), %VEC(3)
-	VMOVA	(VEC_SIZE * 7)(%LOOP_REG), %VEC(4)
+	VMOVA	(VEC_SIZE * 4)(%LOOP_REG), %VMM(1)
+	VMOVA	(VEC_SIZE * 5)(%LOOP_REG), %VMM(2)
+	VMOVA	(VEC_SIZE * 6)(%LOOP_REG), %VMM(3)
+	VMOVA	(VEC_SIZE * 7)(%LOOP_REG), %VMM(4)
 
 	/* Collect bits where VEC_1 does NOT match esi.  This is later
 	   use to mask of results (getting not matches allows us to
 	   save an instruction on combining).  */
-	VPCMP	$4, %VMATCH, %VEC(1), %k1
+	VPCMP	$4, %VMATCH, %VMM(1), %k1
 
 	/* Two methods for loop depending on VEC_SIZE.  This is because
 	   with zmm registers VPMINU can only run on p0 (as opposed to
@@ -310,43 +309,43 @@ L(loop_4x_vec):
 # if VEC_SIZE == 32
 	/* For VEC_2 and VEC_3 use xor to set the CHARs matching esi to
 	   zero.  */
-	vpxorq	%VEC(2), %VMATCH, %VEC(6)
-	vpxorq	%VEC(3), %VMATCH, %VEC(7)
+	vpxorq	%VMM(2), %VMATCH, %VMM(6)
+	vpxorq	%VMM(3), %VMATCH, %VMM(7)
 
 	/* Find non-matches in VEC_4 while combining with non-matches
 	   from VEC_1.  NB: Try and use masked predicate execution on
 	   instructions that have mask result as it has no latency
 	   penalty.  */
-	VPCMP	$4, %VMATCH, %VEC(4), %k4{%k1}
+	VPCMP	$4, %VMATCH, %VMM(4), %k4{%k1}
 
 	/* Combined zeros from VEC_1 / VEC_2 (search for null term).  */
-	VPMINU	%VEC(1), %VEC(2), %VEC(2)
+	VPMINU	%VMM(1), %VMM(2), %VMM(2)
 
 	/* Use min to select all zeros from either xor or end of
 	   string).  */
-	VPMINU	%VEC(3), %VEC(7), %VEC(3)
-	VPMINU	%VEC(2), %VEC(6), %VEC(2)
+	VPMINU	%VMM(3), %VMM(7), %VMM(3)
+	VPMINU	%VMM(2), %VMM(6), %VMM(2)
 
 	/* Combined zeros from VEC_2 / VEC_3 (search for null term).  */
-	VPMINU	%VEC(3), %VEC(4), %VEC(4)
+	VPMINU	%VMM(3), %VMM(4), %VMM(4)
 
 	/* Combined zeros from VEC_2 / VEC_4 (this has all null term and
 	   esi matches for VEC_2 / VEC_3).  */
-	VPMINU	%VEC(2), %VEC(4), %VEC(4)
+	VPMINU	%VMM(2), %VMM(4), %VMM(4)
 # else
 	/* Collect non-matches for VEC_2.  */
-	VPCMP	$4, %VEC(2), %VMATCH, %k2
+	VPCMP	$4, %VMM(2), %VMATCH, %k2
 
 	/* Combined zeros from VEC_1 / VEC_2 (search for null term).  */
-	VPMINU	%VEC(1), %VEC(2), %VEC(2)
+	VPMINU	%VMM(1), %VMM(2), %VMM(2)
 
 	/* Find non-matches in VEC_3/VEC_4 while combining with non-
 	   matches from VEC_1/VEC_2 respectively.  */
-	VPCMP	$4, %VEC(3), %VMATCH, %k3{%k1}
-	VPCMP	$4, %VEC(4), %VMATCH, %k4{%k2}
+	VPCMP	$4, %VMM(3), %VMATCH, %k3{%k1}
+	VPCMP	$4, %VMM(4), %VMATCH, %k4{%k2}
 
 	/* Finish combining zeros in all VECs.  */
-	VPMINU	%VEC(3), %VEC(4), %VEC(4)
+	VPMINU	%VMM(3), %VMM(4), %VMM(4)
 
 	/* Combine in esi matches for VEC_3 (if there was a match with
 	   esi, the corresponding bit in %k3 is zero so the
@@ -354,10 +353,10 @@ L(loop_4x_vec):
 	   the VPMINU 3c latency.  The only way to avoid it is to
 	   createa a 12c dependency chain on all the `VPCMP $4, ...`
 	   which has higher total latency.  */
-	VPMINU	%VEC(2), %VEC(4), %VEC(4){%k3}{z}
+	VPMINU	%VMM(2), %VMM(4), %VMM(4){%k3}{z}
 # endif
-	VPTEST	%VEC(4), %VEC(4), %k0{%k4}
-	kmovV	%k0, %VRDX
+	VPTEST	%VMM(4), %VMM(4), %k0{%k4}
+	KMOV	%k0, %VRDX
 	subq	$-(VEC_SIZE * 4), %LOOP_REG
 
 	/* TESTZ is inc using the proper register width depending on
@@ -366,8 +365,8 @@ L(loop_4x_vec):
 	TESTZ	(rdx)
 	jz	L(loop_4x_vec)
 
-	VPTEST	%VEC(1), %VEC(1), %k0{%k1}
-	kmovV	%k0, %VGPR(MASK_GPR)
+	VPTEST	%VMM(1), %VMM(1), %k0{%k1}
+	KMOV	%k0, %VGPR(MASK_GPR)
 	TESTZ	(MASK_GPR)
 # if VEC_SIZE == 32
 	/* We can reuse the return code in page_cross logic for VEC_SIZE
@@ -380,13 +379,13 @@ L(loop_4x_vec):
 
 	/* COND_MASK integates the esi matches for VEC_SIZE == 64. For
 	   VEC_SIZE == 32 they are already integrated.  */
-	VPTEST	%VEC(2), %VEC(2), %k0 COND_MASK(k2)
-	kmovV	%k0, %VRCX
+	VPTEST	%VMM(2), %VMM(2), %k0 COND_MASK(k2)
+	KMOV	%k0, %VRCX
 	TESTZ	(rcx)
 	jnz	L(last_vec_x2)
 
-	VPTEST	%VEC(3), %VEC(3), %k0 COND_MASK(k3)
-	kmovV	%k0, %VRCX
+	VPTEST	%VMM(3), %VMM(3), %k0 COND_MASK(k3)
+	KMOV	%k0, %VRCX
 # if CHAR_PER_VEC == 64
 	TESTZ	(rcx)
 	jnz	L(last_vec_x3)
@@ -460,23 +459,23 @@ L(cross_page_boundary_real):
 	VMOVU	%ymm0, %ymm16
 	/* Align rdi.  */
 	xorq	%rdi, %rax
-	VMOVA	(PAGE_SIZE - VEC_SIZE)(%rax), %VEC(1)
+	VMOVA	(PAGE_SIZE - VEC_SIZE)(%rax), %VMM(1)
 	/* Use high latency method of getting matches to save code size.
 	 */
 
 	/* K1 has 1s where VEC(1) does NOT match esi.  */
-	VPCMP	$4, %VEC(1), %VMATCH, %k1
+	VPCMP	$4, %VMM(1), %VMATCH, %k1
 	/* K0 has ones where K1 is 1 (non-match with esi), and non-zero
 	   (null).  */
-	VPTEST	%VEC(1), %VEC(1), %k0{%k1}
-	kmovV	%k0, %VRAX
+	VPTEST	%VMM(1), %VMM(1), %k0{%k1}
+	KMOV	%k0, %VRAX
 	/* Remove the leading bits.  */
 # ifdef USE_AS_WCSCHR
-	movl	%edi, %SHIFT_REG
+	movl	%edi, %VGPR_SZ(SHIFT_REG, 32)
 	/* NB: Divide shift count by 4 since each bit in K1 represent 4
 	   bytes.  */
-	sarl	$2, %SHIFT_REG
-	andl	$(CHAR_PER_VEC - 1), %SHIFT_REG
+	sarl	$2, %VGPR_SZ(SHIFT_REG, 32)
+	andl	$(CHAR_PER_VEC - 1), %VGPR_SZ(SHIFT_REG, 32)
 
 	/* if wcsrchr we need to reverse matches as we can't rely on
 	   signed shift to bring in ones. There is not sarx for

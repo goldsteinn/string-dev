@@ -1,34 +1,38 @@
-#ifndef _SRC__ASM__LIBC_DEFS__LIBC_AVX512_VECS_H_
-#define _SRC__ASM__LIBC_DEFS__LIBC_AVX512_VECS_H_
+/* Common config for EVEX512 VECs
+   All versions must be listed in ifunc-impl-list.c.
+   Copyright (C) 2022 Free Software Foundation, Inc.
+   This file is part of the GNU C Library.
 
+   The GNU C Library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2.1 of the License, or (at your option) any later version.
 
-#ifdef HAS_VEC
-#error "Multiple VEC configs included!"
+   The GNU C Library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with the GNU C Library; if not, see
+   <https://www.gnu.org/licenses/>.  */
+
+#ifndef _EVEX512_VECS_H
+#define _EVEX512_VECS_H			1
+
+#ifdef VEC_SIZE
+# error "Multiple VEC configs included!"
 #endif
 
-#define HAS_VEC 1
-#include "libc-vec-macros.h"
+#define VEC_SIZE			64
+#include "libc-evex-vecs-common.h"
 
-#define USE_WITH_EVEX512 1
-#define SECTION(p)       p##.evex512
+#define USE_WITH_EVEX512	1
 
-#define VEC_SIZE 64
-/* 6-byte mov instructions with EVEX.  */
-#define MOV_SIZE 6
-/* No vzeroupper needed.  */
-#define RET_SIZE 1
-#define VZEROUPPER
+#ifndef SECTION
+# define SECTION(p)			p##.evex512
+#endif
 
-#define VMOVU  vmovdqu64
-#define VMOVA  vmovdqa64
-#define VMOVNT vmovntdq
-
-/* Often need to access xmm/ymm portion.  */
-#define VEC_xmm VEC_hi_xmm
-#define VEC_ymm VEC_hi_ymm
-#define VEC     VEC_hi_zmm
-
-#define VEC_lo VEC_any_zmm
-
-
+#define VMM					VMM_512
+#define VMM_lo				VMM_any_zmm
 #endif
