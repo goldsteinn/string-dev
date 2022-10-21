@@ -39,9 +39,9 @@
 #define decl_wcsncmp(func)                                                     \
     extern int func(wchar_t const *, wchar_t const *, size_t)
 
-#define STRRCHR_IMPLS expand_impls(strrchr, evex512, evex, avx2, sse2)
+#define STRRCHR_IMPLS expand_impls(strrchr, evex512, evex)
 #define WCSRCHR_IMPLS expand_impls(wcsrchr, evex512, evex, avx2, sse2)
-#define MEMCPY_IMPLS  expand_impls(memcpy, ssse3)
+#define MEMCPY_IMPLS  expand_impls(memcpy, ssse3),  memcpy_avx2_folly, memcpy_avx2_dev
 #define MEMCMP_IMPLS                                                           \
     expand_impls(memcmp, ssse3, sse2, sse4, avx2, evex), memcmp_evex512_dev
 #define WMEMCMP_IMPLS                                                          \
@@ -81,7 +81,7 @@
 #define STRCHRNUL_IMPLS expand_impls(strchrnul, sse2, avx2, evex, evex512)
 #define WCSCHR_IMPLS    expand_impls(wcschr, sse2, avx2, evex, evex512)
 
-#define MEMSET_IMPLS memset_sse2_glibc, memset_sse2_erms_glibc
+#define MEMSET_IMPLS memset_sse2_glibc, memset_sse2_erms_glibc, memset_avx2_folly, memset_avx2_dev
 
 #define STRCMP_IMPLS                                                           \
     expand_impls(strcmp, sse2, sse2_unaligned, sse42, avx2, evex),             \

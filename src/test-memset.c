@@ -34,7 +34,12 @@ region_good(uint8_t const * buf,
     return 0;
 }
 
-
+#define INIT_I 0
+#define INIT_J 193
+#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
+#ifndef PRINTV
+#define PRINTV(...)
+#endif
 static int
 test_memset_kernel(void const * test_f, uint32_t test_size) {
     func_switch_t func = { test_f };
@@ -42,10 +47,12 @@ test_memset_kernel(void const * test_f, uint32_t test_size) {
     memset(buf, FILL, test_size);
 
 
-    for (uint64_t i = 0; i < test_size; ++i) {
-        for (uint64_t j = 0; j + i < test_size; ++j) {
+    for (uint64_t i = INIT_I; i < test_size; ++i) {
+        for (uint64_t j = INIT_J; j + i < test_size; ++j) {
+            PRINTV("%lu:%lu\n", i, j);
             run(buf + i, VAL, j);
-            test_assert(region_good(buf, i, j, test_size) == 0);
+            test_assert(region_good(buf, i, j, test_size) == 0, "%lu, %lu\n", i,
+                        j);
             memset(buf + i, FILL, j);
         }
     }

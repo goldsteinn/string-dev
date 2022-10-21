@@ -95,7 +95,10 @@ init_memmove(uint8_t * s1_start,
 #define INIT_I 0
 #define INIT_J 0
 #define INIT_K 0
-
+//#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
+#ifndef PRINTV
+#define PRINTV(...)
+#endif
 static int
 test_memcpy_kernel_overlap(void const * test_f,
                            uint32_t     test_min,
@@ -118,6 +121,7 @@ test_memcpy_kernel_overlap(void const * test_f,
              j + al_offset < test_size; ++j) {
 
             for (uint32_t k = INIT_K; k < NPAIRS; ++k) {
+                PRINTV("%u:%u:%u\n", al_offset, j, k);
                 test1 = s_base + al_pairs[S1_IDX(k)];
                 test2 = s_base + al_pairs[S2_IDX(k)];
 
@@ -183,6 +187,7 @@ test_memcpy_kernel_no_overlap(void const * test_f,
              j + al_offset < test_size; ++j) {
             // fprintf(stderr, "%u\n", j);
             for (uint32_t k = INIT_K; k < NPAIRS; ++k) {
+                PRINTV("%u:%u:%u\n", al_offset, j, k);
                 test1 = s1 + al_pairs[S1_IDX(k)];
                 test2 = s2_lo + al_pairs[S2_IDX(k)];
 
