@@ -7,4 +7,4 @@
 # define OVERFLOW_STRCMP	strcmp_evex512_dev
 #endif
 #include "../libc-defs/libc-evex512-vecs.h"
-#include "core/strcmp-evex-dev.S"
+#include "core/strcmp-evex-submit.S"

@@ -28,8 +28,8 @@ set_priors(uint8_t * buf, uint32_t setv, uint32_t ub, uint32_t inc) {
 }
 
 #define INIT_I   0
-#define INIT_J   264
-#define INIT_K   385
+#define INIT_J   0
+#define INIT_K   0
 #define INIT_INC 12
 //#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
 
@@ -193,6 +193,23 @@ test_memchr_kernel(void const * test_f,
                 k   = 1UL << 63;
                 res = run(test_buf, 0x01010101, k);
                 test_assert(expec == res, FAILURE_MSG);
+
+                k   = ((1UL << 63) + 1);
+                res = run(test_buf, 0x01010101, k);
+                test_assert(expec == res, FAILURE_MSG);
+
+                k   = ((1UL << 63) + 16);
+                res = run(test_buf, 0x01010101, k);
+                test_assert(expec == res, FAILURE_MSG);
+
+                k   = ((1UL << 63) + 32);
+                res = run(test_buf, 0x01010101, k);
+                test_assert(expec == res, FAILURE_MSG);
+
+                k   = ((1UL << 63) + 64);
+                res = run(test_buf, 0x01010101, k);
+                test_assert(expec == res, FAILURE_MSG);
+
                 PRINTFFL;
                 k   = 1UL << 62;
                 res = run(test_buf, 0x01010101, k);

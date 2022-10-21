@@ -39,8 +39,9 @@
 
 #define ENDBR4_NOPS NOP4
 
-#define _CET_NOTRACK notrack
-
+#define _CET_NOTRACK
+#define _CET_ENDBR
+#define CALL_MCOUNT
 #include "asm-common.h"
 
 #endif

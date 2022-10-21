@@ -26,7 +26,7 @@
 # endif
 
 # ifndef VEC_SIZE
-# include "../../libc-defs/libc-evex256-vecs.h"
+#  include "../../libc-defs/libc-evex256-vecs.h"
 # endif
 
 # ifdef USE_AS_WCSCHR
@@ -91,39 +91,30 @@
 # define PAGE_SIZE	4096
 
 	.section SECTION(.text), "ax", @progbits
-ENTRY_P2ALIGN (STRCHR, 6)
+ENTRY_P2ALIGN(STRCHR, 6)
 	/* Broadcast CHAR to VEC_0.  */
 	VPBROADCAST %esi, %VMATCH
 	movl	%edi, %eax
 	andl	$(PAGE_SIZE - 1), %eax
 	/* Check if we cross page boundary with one vector load.
 	   Otherwise it is safe to use an unaligned load.  */
-	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
+	cmpl	$((PAGE_SIZE - VEC_SIZE) << 20), %eax
 	ja	L(cross_page_boundary)
-
 
 	/* Check the first VEC_SIZE bytes. Search for both CHAR and the
 	   null bytes.  */
 	VMOVU	(%rdi), %VMM(1)
-	/* Leaves only CHARS matching esi as 0.  */
-	vpxorq	%VMM(1), %VMATCH, %VMM(2)
-	VPMINU	%VMM(2), %VMM(1), %VMM(2)
-	/* Each bit in K0 represents a CHAR or a null byte in VEC_1.  */
-	VPTESTN	%VMM(2), %VMM(2), %k0
+	VPCMP	$4, %VMM(1), %VMATCH, %k1
+	VPTEST	%VMM(1), %VMM(1), %k0{%k1}
 	KMOV	%k0, %VRAX
-# if VEC_SIZE == 64 && defined USE_AS_STRCHRNUL
-	/* If VEC_SIZE == 64 && STRCHRNUL use bsf to test condition so
-	   that all logic for match/null in first VEC first in 1x cache
-	   lines.  This has a slight cost to larger sizes.  */
-	bsf	%VRAX, %VRAX
-	jz	L(aligned_more)
-# else
-	test	%VRAX, %VRAX
+
+	inc	%VRAX
 	jz	L(aligned_more)
 	bsf	%VRAX, %VRAX
-# endif
-# ifndef USE_AS_STRCHRNUL
+
 	/* Found CHAR or the null byte.  */
+
+# ifndef USE_AS_STRCHRNUL
 	cmp	(%rdi, %rax, CHAR_SIZE), %CHAR_REG
 	/* NB: Use a branch instead of cmovcc here. The expectation is
 	   that with strchr the user will branch based on input being
@@ -134,6 +125,7 @@ ENTRY_P2ALIGN (STRCHR, 6)
 	   environments.  */
 	jne	L(zero)
 # endif
+
 # ifdef USE_AS_WCSCHR
 	/* NB: Multiply wchar_t count by 4 to get the number of bytes.
 	 */
@@ -141,6 +133,7 @@ ENTRY_P2ALIGN (STRCHR, 6)
 # else
 	addq	%rdi, %rax
 # endif
+
 	ret
 
 # ifndef USE_AS_STRCHRNUL
@@ -149,7 +142,7 @@ L(zero):
 	ret
 # endif
 
-	.p2align 4,, 2
+	.p2align 4,, 6
 L(first_vec_x3):
 	subq	$-(VEC_SIZE * 2), %rdi
 # if VEC_SIZE == 32
@@ -194,7 +187,7 @@ L(first_vec_x2):
 	leaq	(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %rax
 	ret
 
-# ifdef USE_AS_STRCHRNUL
+# if 1	// def USE_AS_STRCHRNUL
 	/* We use this as a hook to get imm8 encoding for the jmp to
 	   L(page_cross_boundary).  This allows the hot case of a
 	   match/null-term in first VEC to fit entirely in 1 cache
@@ -214,11 +207,9 @@ L(cross_page_continue):
 	   methods for checking VEC to balance latency and port
 	   contention.  */
 
-    /* Method(1) with 8c latency:
-	   For VEC_SIZE == 32:
-	   p0 * 1.83, p1 * 0.83, p5 * 1.33
-	   For VEC_SIZE == 64:
-	   p0 * 2.50, p1 * 0.00, p5 * 1.50  */
+	/* Method(1) with 8c latency: For VEC_SIZE == 32: p0 * 1.83, p1
+	   * 0.83, p5 * 1.33 For VEC_SIZE == 64: p0 * 2.50, p1 * 0.00,
+	   p5 * 1.50.  */
 	VMOVA	(VEC_SIZE)(%rdi), %VMM(1)
 	/* Leaves only CHARS matching esi as 0.  */
 	vpxorq	%VMM(1), %VMATCH, %VMM(2)
@@ -229,17 +220,15 @@ L(cross_page_continue):
 	test	%VRCX, %VRCX
 	jnz	L(first_vec_x1)
 
-    /* Method(2) with 6c latency:
-	   For VEC_SIZE == 32:
-	   p0 * 1.00, p1 * 0.00, p5 * 2.00
-	   For VEC_SIZE == 64:
-	   p0 * 1.00, p1 * 0.00, p5 * 2.00  */
+	/* Method(2) with 6c latency: For VEC_SIZE == 32: p0 * 1.00, p1
+	   * 0.00, p5 * 2.00 For VEC_SIZE == 64: p0 * 1.00, p1 * 0.00,
+	   p5 * 2.00.  */
 	VMOVA	(VEC_SIZE * 2)(%rdi), %VMM(1)
 	/* Each bit in K0 represents a CHAR in VEC_1.  */
 	VPCMPEQ	%VMM(1), %VMATCH, %k0
 	/* Each bit in K1 represents a CHAR in VEC_1.  */
 	VPTESTN	%VMM(1), %VMM(1), %k1
-	KORTEST %k0, %k1
+	KORTEST	%k0, %k1
 	jnz	L(first_vec_x2)
 
 	/* By swapping between Method 1/2 we get more fair port
@@ -260,7 +249,7 @@ L(cross_page_continue):
 	VPCMPEQ	%VMM(1), %VMATCH, %k0
 	/* Each bit in K1 represents a CHAR in VEC_1.  */
 	VPTESTN	%VMM(1), %VMM(1), %k1
-	KORTEST %k0, %k1
+	KORTEST	%k0, %k1
 	jnz	L(first_vec_x4)
 
 	/* Align data to VEC_SIZE * 4 for the loop.  */
@@ -449,7 +438,7 @@ L(last_vec_x2):
 	/* Cold case for crossing page with first load.  */
 	.p2align 4,, 10
 # ifndef USE_AS_STRCHRNUL
-L(cross_page_boundary):
+	// L(cross_page_boundary):
 # endif
 L(cross_page_boundary_real):
 	/* Align rdi.  */
@@ -512,5 +501,5 @@ L(zero_end_0):
 	ret
 # endif
 
-END (STRCHR)
+END(STRCHR)
 #endif

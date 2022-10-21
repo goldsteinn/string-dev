@@ -1,10 +1,10 @@
 #ifndef _SRC__STRING_BENCH_TYPES_H_
 #define _SRC__STRING_BENCH_TYPES_H_
 
-#include "util/error-util.h"
-#include "util/types.h"
-
 #include "bench-memcpy-init.h"
+#include "util/error-util.h"
+#include "util/random.h"
+#include "util/types.h"
 
 #include "string-bench-conf.h"
 
@@ -215,13 +215,16 @@ memcmp_bench_init(bench_info_t * bench_info) {
 
 static void
 strchr_bench_init_shared(bench_info_t * bench_info, uint32_t wsize) {
-    uint8_t * _s0;
-    uint32_t  _sz0, _sz1;
+    uint8_t *    _s0;
+    uint32_t     _sz0, _sz1;
+    bench_todo_e _todo;
+
     die_assert(bench_info);
 
-    _s0  = bench_info->s0;
-    _sz0 = bench_info->sz0;
-    _sz1 = bench_info->sz1;
+    _s0   = bench_info->s0;
+    _sz0  = bench_info->sz0;
+    _sz1  = bench_info->sz1;
+    _todo = bench_info->todo;
 
     die_assert(_s0);
 
@@ -233,6 +236,22 @@ strchr_bench_init_shared(bench_info_t * bench_info, uint32_t wsize) {
     memset_c(_s0 + _sz1 * wsize, 0x01010101, wsize);
 
     memset_c(_s0 + _sz0 * wsize, 0x0, wsize);
+
+    if (_todo & RAND) {
+        uint8_t * _s1;
+        uint32_t  i;
+        _s1 = bench_info->s1;
+        die_assert(_s1);
+        for (i = 0; i < NCONFS; ++i) {
+            uint64_t rval = true_rand64();
+            if (rval & 1) {
+                _s1[i] = 0x01;
+            }
+            else {
+                _s1[i] = 0x02;
+            }
+        }
+    }
 }
 
 static void

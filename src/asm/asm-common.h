@@ -25,7 +25,7 @@
 
 #define ALIGNARG(log2) (1 << (log2))
 #define ENTRY_P2ALIGN(name, alignment)                                         \
-    .align ALIGNARG(alignment);                                                \
+    .align ALIGNARG(12);                                                \
     ENTRY_END(name)
 
 #define PAGE_ALIGN_CODE .align 4096;
@@ -83,4 +83,6 @@
 
 #include "nops.h"
 
+
+#define strong_alias(...)
 #endif

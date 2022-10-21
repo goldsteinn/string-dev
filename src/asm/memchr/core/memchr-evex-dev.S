@@ -19,7 +19,7 @@
 #if 1
 
 # ifndef VEC_SIZE
-#  include "../../libc-defs/libc-evex-vecs.h"
+#  include "../../libc-defs/libc-evex256-vecs.h"
 # endif
 
 # ifndef MEMCHR

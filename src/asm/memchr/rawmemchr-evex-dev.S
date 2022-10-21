@@ -1,3 +1,5 @@
 #define MEMCHR				rawmemchr_evex_dev
+#define RAWMEMCHR MEMCHR
 #define USE_AS_RAWMEMCHR
-#include "core/rawmemchr-evex-final.S"
+#include "../libc-defs/libc-evex256-vecs.h"
+#include "core/rawmemchr-evex-submit.S"

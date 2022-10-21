@@ -14,18 +14,15 @@
 
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
-<https://www.gnu.org/licenses/>.  */
-	// #define USE_IN_RTM
-#ifndef MEMCHR
-# define MEMCHR	slen
-#endif
+   <https://www.gnu.org/licenses/>.  */
+
+#include "../../libc-asm-common.h"
+
+#if ISA_SHOULD_BUILD (4)
+
 #ifndef VEC_SIZE
 # include "../../libc-defs/libc-evex256-vecs.h"
 #endif
-
-
-#include "../../libc-asm-common.h"
-#if ISA_SHOULD_BUILD (4)
 
 # ifndef MEMCHR
 #  define MEMCHR	__memchr_evex
@@ -39,7 +36,7 @@
 #  define VPCMP	vpcmpd
 #  define VPCMPEQ	vpcmpeqd
 #  define CHAR_SIZE	4
-	
+
 #  define USE_WIDE_CHAR
 # else
 #  define PC_SHIFT_GPR	rdi
@@ -54,12 +51,10 @@
 # include "../../libc-defs/libc-reg-macros.h"
 
 
-// abf-off
 /* If not in an RTM and VEC_SIZE != 64 (the VEC_SIZE = 64
    doesn't have VEX encoding), use VEX encoding in loop so we
    can use vpcmpeqb + vptern which is more efficient than the
    EVEX alternative.  */
-// abf-on
 # if defined USE_IN_RTM || VEC_SIZE == 64
 #  undef COND_VZEROUPPER
 #  undef VZEROUPPER_RETURN
@@ -125,7 +120,7 @@
 
 
 	.section SECTION(.text), "ax", @progbits
-ENTRY_P2ALIGN(MEMCHR, 6)
+ENTRY_P2ALIGN (MEMCHR, 6)
 	/* Check for zero length.  */
 	test	%RDX_LP, %RDX_LP
 	jz	L(zero_0)
@@ -636,10 +631,6 @@ L(last_vec_x0):
 # endif
 	ret
 
-
-
-
-
 	.p2align 4,, 6
 L(page_cross):
 	/* Need to preserve eax to compute inbound bytes we are
@@ -713,5 +704,5 @@ L(page_cross_ret):
 	addq	%rdi, %rax
 # endif
 	ret
-END(MEMCHR)
+END (MEMCHR)
 #endif
