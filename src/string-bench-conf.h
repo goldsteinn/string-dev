@@ -8,6 +8,6 @@
 #define bench_name(func) CAT(bench_, func)
 
 typedef enum bench_todo { TPUT = 1, LAT = 2, RAND = 4 } bench_todo_e;
-enum { NCONFS = 8192 };
+enum { NCONFS = 4096 };
 
 #endif

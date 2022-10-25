@@ -20,7 +20,7 @@
 
 #if ISA_SHOULD_BUILD (4)
 
-
+//# define USE_AS_STRCHRNUL
 # ifndef STRCHR
 #  define STRCHR	__strchr_evex
 # endif
@@ -56,11 +56,13 @@
 # include "../../libc-defs/libc-reg-macros.h"
 
 # if VEC_SIZE == 64
+#  define PAGE_CHECK_SHIFT	20
 #  define MASK_GPR	rcx
 #  define LOOP_REG	rax
 
 #  define COND_MASK(k_reg)	{%k_reg}
 # else
+#  define PAGE_CHECK_SHIFT	0
 #  define MASK_GPR	rax
 #  define LOOP_REG	rdi
 
@@ -95,10 +97,14 @@ ENTRY_P2ALIGN(STRCHR, 6)
 	/* Broadcast CHAR to VEC_0.  */
 	VPBROADCAST %esi, %VMATCH
 	movl	%edi, %eax
+# if PAGE_CHECK_SHIFT
+	sall	$PAGE_CHECK_SHIFT, %eax
+# else
 	andl	$(PAGE_SIZE - 1), %eax
+# endif
 	/* Check if we cross page boundary with one vector load.
 	   Otherwise it is safe to use an unaligned load.  */
-	cmpl	$((PAGE_SIZE - VEC_SIZE) << 20), %eax
+	cmpl	$((PAGE_SIZE - VEC_SIZE) << PAGE_CHECK_SHIFT), %eax
 	ja	L(cross_page_boundary)
 
 	/* Check the first VEC_SIZE bytes. Search for both CHAR and the
@@ -108,13 +114,13 @@ ENTRY_P2ALIGN(STRCHR, 6)
 	VPTEST	%VMM(1), %VMM(1), %k0{%k1}
 	KMOV	%k0, %VRAX
 
-	inc	%VRAX
+	TESTZ	(rax)
 	jz	L(aligned_more)
 	bsf	%VRAX, %VRAX
 
 	/* Found CHAR or the null byte.  */
 
-# ifndef USE_AS_STRCHRNUL
+# if !defined(USE_AS_STRCHRNUL) && VEC_SIZE != 64
 	cmp	(%rdi, %rax, CHAR_SIZE), %CHAR_REG
 	/* NB: Use a branch instead of cmovcc here. The expectation is
 	   that with strchr the user will branch based on input being
@@ -127,12 +133,25 @@ ENTRY_P2ALIGN(STRCHR, 6)
 # endif
 
 # ifdef USE_AS_WCSCHR
-	/* NB: Multiply wchar_t count by 4 to get the number of bytes.
-	 */
+	/* NB: Multiply wchar_t count by 4 to get the number of bytes.  */
 	leaq	(%rdi, %rax, CHAR_SIZE), %rax
 # else
 	addq	%rdi, %rax
 # endif
+
+# if !defined(USE_AS_STRCHRNUL) && VEC_SIZE == 64
+	cmp	(%rax), %CHAR_REG
+	/* NB: Use a branch instead of cmovcc here. The expectation is
+	   that with strchr the user will branch based on input being
+	   null. Since this branch will be 100% predictive of the user
+	   branch a branch miss here should save what otherwise would
+	   be branch miss in the user code. Otherwise using a branch 1)
+	   saves code size and 2) is faster in highly predictable
+	   environments.  */
+	jne	L(zero)
+# endif
+
+
 
 	ret
 
@@ -140,6 +159,15 @@ ENTRY_P2ALIGN(STRCHR, 6)
 L(zero):
 	xorl	%eax, %eax
 	ret
+# endif
+
+# ifdef USE_AS_STRCHRNUL
+	/* We use this as a hook to get imm8 encoding for the jmp to
+	   L(page_cross_boundary).  This allows the hot case of a
+	   match/null-term in first VEC to fit entirely in 1 cache
+	   line.  */
+L(cross_page_boundary):
+	jmp	L(cross_page_boundary_real)
 # endif
 
 	.p2align 4,, 6
@@ -164,6 +192,16 @@ L(first_vec_x1):
 	leaq	(VEC_SIZE)(%rdi, %rcx, CHAR_SIZE), %rax
 	ret
 
+
+# ifndef USE_AS_STRCHRNUL
+	/* We use this as a hook to get imm8 encoding for the jmp to
+	   L(page_cross_boundary).  This allows the hot case of a
+	   match/null-term in first VEC to fit entirely in 1 cache
+	   line.  */
+L(cross_page_boundary):
+	jmp	L(cross_page_boundary_real)
+# endif
+
 	.p2align 4,, 2
 L(first_vec_x4):
 	subq	$-(VEC_SIZE * 2), %rdi
@@ -187,14 +225,6 @@ L(first_vec_x2):
 	leaq	(VEC_SIZE * 2)(%rdi, %rax, CHAR_SIZE), %rax
 	ret
 
-# if 1	// def USE_AS_STRCHRNUL
-	/* We use this as a hook to get imm8 encoding for the jmp to
-	   L(page_cross_boundary).  This allows the hot case of a
-	   match/null-term in first VEC to fit entirely in 1 cache
-	   line.  */
-L(cross_page_boundary):
-	jmp	L(cross_page_boundary_real)
-# endif
 
 	.p2align 4
 L(aligned_more):
@@ -404,8 +434,7 @@ L(last_vec_x1_vec_size64):
 	jne	L(zero_end)
 #  endif
 #  ifdef USE_AS_WCSCHR
-	/* NB: Multiply wchar_t count by 4 to get the number of bytes.
-	 */
+	/* NB: Multiply wchar_t count by 4 to get the number of bytes.  */
 	leaq	(%rax, %rcx, CHAR_SIZE), %rax
 #  else
 	addq	%rcx, %rax
@@ -441,11 +470,13 @@ L(last_vec_x2):
 	// L(cross_page_boundary):
 # endif
 L(cross_page_boundary_real):
+# if PAGE_CHECK_SHIFT
+	shrl	$PAGE_CHECK_SHIFT, %eax
+# endif
 	/* Align rdi.  */
 	xorq	%rdi, %rax
 	VMOVA	(PAGE_SIZE - VEC_SIZE)(%rax), %VMM(1)
-	/* Use high latency method of getting matches to save code size.
-	 */
+	/* Use high latency method of getting matches to save code size.  */
 
 	/* K1 has 1s where VEC(1) does NOT match esi.  */
 	VPCMP	$4, %VMM(1), %VMATCH, %k1
@@ -464,8 +495,7 @@ L(cross_page_boundary_real):
 	/* if wcsrchr we need to reverse matches as we can't rely on
 	   signed shift to bring in ones. There is not sarx for
 	   gpr8/16. Also not we can't use inc here as the lower bits
-	   represent matches out of range so we can't rely on overflow.
-	 */
+	   represent matches out of range so we can't rely on overflow.  */
 	xorl	$((1 << CHAR_PER_VEC)- 1), %eax
 # endif
 	/* Use arithmatic shift so that leading 1s are filled in.  */
@@ -483,8 +513,7 @@ L(cross_page_boundary_real):
 L(last_vec_x1_vec_size32):
 	bsf	%VRAX, %VRAX
 # ifdef USE_AS_WCSCHR
-	/* NB: Multiply wchar_t count by 4 to get the number of bytes.
-	 */
+	/* NB: Multiply wchar_t count by 4 to get the number of bytes.  */
 	leaq	(%rdi, %rax, CHAR_SIZE), %rax
 # else
 	addq	%rdi, %rax
