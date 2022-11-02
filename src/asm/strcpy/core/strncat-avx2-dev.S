@@ -180,7 +180,7 @@ L(page_cross_continue):
 	jz	L(more_1x_vec)
 
 	/* Hoist this to save code size.  */
-	vzeroupper
+	COND_VZEROUPPER
 	bsfl	%ecx, %edx
 
 	testw	%cx, %cx
@@ -192,7 +192,7 @@ L(copy_less_16):
 	jz	L(copy_8_15)
 
 # ifndef USE_AS_WCSCPY
-	andl	$0x7, %ecx
+	testb	$0x7, %cl
 	jz	L(copy_4_7)
 
 	vmovd	%xmm0, %ecx
@@ -506,7 +506,7 @@ L(page_cross_small):
 	testb	%cl, %cl
 	jz	L(page_cross_copy_8_15)
 
-	andl	$0x7, %ecx
+	testb	$0x7, %cl
 	jz	L(page_cross_copy_4_7)
 
 	testl	%edx, %edx

@@ -1,5 +1,5 @@
-/* strcpy with 256-bit EVEX instructions.
-   Copyright (C) 2021-2022 Free Software Foundation, Inc.
+/* strcpy with AVX2
+   Copyright (C) 2011-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -15,23 +15,11 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
 #include "../../libc-asm-common.h"
-
-#if ISA_SHOULD_BUILD (4)
-
-	/* Use evex-masked stores for small sizes. Turned off at the
-	   moment.  */
-# define USE_EVEX_MASKED_STORE	0
-
-
+#if IS_IN (libc)
 
 # ifndef VEC_SIZE
 #  include "../../libc-defs/libc-evex256-vecs.h"
-# endif
-
-# ifndef STRCPY
-#  define STRCPY	__strcpy_evex
 # endif
 
 # ifdef USE_AS_WCSCPY
@@ -42,17 +30,6 @@
 #  define VPTEST	vptestmd
 #  define CHAR_SIZE	4
 #  define USE_WIDE_CHAR
-
-#  define REP_MOVS	rep movsd
-#  define REP_STOS	rep stosl
-
-#  define STRCPY_PREFIX	wc
-#  ifdef USE_AS_STPCPY
-#   define STRCPY_PSR	p
-#  else
-#   define STRCPY_PSR	s
-#  endif
-
 # else
 #  define VMOVU_MASK	vmovdqu8
 #  define VPCMPEQ	vpcmpeqb
@@ -60,37 +37,54 @@
 #  define VPTESTN	vptestnmb
 #  define VPTEST	vptestmb
 #  define CHAR_SIZE	1
-
-#  define REP_MOVS	rep movsb
-#  define REP_STOS	rep stosb
-
-#  define STRCPY_PREFIX	st
-#  ifdef USE_AS_STPCPY
-#   define STRCPY_PSR	p
-#  else
-#   define STRCPY_PSR	r
-#  endif
 # endif
-
-# ifndef STRCPY_EXT
-#  if VEC_SIZE == 64
-#   define STRCPY_EXT	_evex512
-#  else
-#   define STRCPY_EXT	_evex
-#  endif
-# endif
-
-# define PRIMITIVE_NAME_STRCPY(prefix, psr, ext)	prefix ## psr ## ext
-# define NAME_STRCPY(prefix, psr, ext)	PRIMITIVE_NAME_STRCPY(prefix, psr, ext)
-
-# ifndef OVERFLOW_STRCPY
-#  define OVERFLOW_STRCPY	NAME_STRCPY(STRCPY_PREFIX, STRCPY_PSR, STRCPY_EXT)
-# endif
-
-# define PAGE_SIZE	4096
-# define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
+# define USE_EVEX_MASKED_STORE	0
 # include "../../libc-defs/libc-reg-macros.h"
 
+# define PAGE_SIZE	4096
+
+# ifdef USE_AS_STPCPY
+#  define END_REG	rax
+# else
+#  define END_REG	rdi, %rdx
+# endif
+# ifndef USE_AS_STRCAT
+	// #  define USE_AS_STRCAT
+# endif
+	// # define USE_AS_STRNCAT
+# if defined USE_AS_STRNCAT || defined USE_AS_STRNCPY
+#  define USE_AS_STRN
+# endif
+# if defined USE_AS_STRLCAT || defined USE_AS_STRLCPY
+#  define USE_AS_STRL
+# endif
+
+# if defined USE_AS_STRN || defined USE_AS_STRL
+#  define HAS_LEN	1
+# else
+#  define HAS_LEN	0
+# endif
+
+
+# ifdef USE_AS_STRCAT
+#  define PAGE_ALIGN_REG	ecx
+#  if HAS_LEN
+#   define ALIGNED_SRC_REG	r8
+#  else
+#   define ALIGNED_SRC_REG	rdx
+#  endif
+# else
+#  define PAGE_ALIGN_REG	eax
+# endif
+# if HAS_LEN
+#  define TMP_REG32	r8d
+#  define TMP_REG64	r8
+
+# else
+#  define TMP_REG32	edx
+#  define TMP_REG64	rdx
+
+# endif
 
 # define VZERO	VMM(7)
 # define VZERO_256	VMM_256(7)
@@ -102,18 +96,19 @@
 #  define VZERO_HALF	VZERO_128
 # endif
 
+
+# define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
+
 	.section SECTION(.text), "ax", @progbits
 ENTRY(STRCPY)
 	/* Filter zero length strings and very long strings.  Zero
-	   length strings just return, very long strings are handled by
-	   just running rep stos{b|l} to zero set (which will almost
-	   certainly segfault), if that succeeds then just calling
-	   OVERFLOW_STRCPY (strcpy, stpcpy, wcscpy, wcpcpy).  */
+	   length strings just return, very long strings are handled
+	   either by using the non-length variant which has lower
+	   overhead or causing a segfault (strncpy).  */
 # ifdef USE_AS_WCSCPY
 	decq	%rdx
 	movq	%rdx, %rax
-	/* 56 is end of max supported address space.  */
-	shr	$56, %rax
+	shr	$60, %rax
 	jnz	L(zero_len)
 # else
 	decq	%rdx
@@ -121,8 +116,6 @@ ENTRY(STRCPY)
 	 */
 	jl	L(zero_len)
 # endif
-
-
 	movl	%esi, %eax
 	andl	$(PAGE_SIZE - 1), %eax
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %eax
@@ -133,26 +126,16 @@ L(page_cross_continue):
 	VPTESTN	%VMM(0), %VMM(0), %k0
 	KMOV	%k0, %VRCX
 
-	/* If no STPCPY just save end ahead of time.  */
 # ifndef USE_AS_STPCPY
 	movq	%rdi, %rax
 # endif
 
 
 	cmpq	$(CHAR_PER_VEC), %rdx
-
-	/* If USE_EVEX_MASK_STORE is enabled then we just handle length
-	   <= CHAR_PER_VEC with masked instructions (which have
-	   potential for dramatically bad perf if dst splits a page and
-	   is not in the TLB).  */
+	/* `jb` because length rdx is now length - 1.  */
 # if USE_EVEX_MASKED_STORE
-	/* `jae` because length rdx is now length - 1.  */
 	jae	L(more_1x_vec)
-
-	/* If there where multiple zero-CHAR matches in the first VEC,
-	   VRCX will be overset but thats fine since any oversets where
-	   at zero-positions anyways.  */
-	dec	%VRCX
+	blsmsk	%VRCX, %VRSI
 #  ifdef USE_AS_STPCPY
 	tzcnt	%VRCX, %VRAX
 	cmpl	%eax, %edx
@@ -160,21 +143,14 @@ L(page_cross_continue):
 	adcq	%rdi, %rax
 #  endif
 
-
-	/* Zero out all non-zero CHAR's after the first zero match.  */
-	KMOV	%VRCX, %k1
-
-	/* Use VZERO as destination so this can be reused for
-	   L(zfill_less_vec) (which if jumped to by subsequent logic
-	   will have zerod out VZERO.  */
-	VMOVU_MASK %VMM(0), %VZERO{%k1}{z}
+	KMOV	%VRSI, %k1
+	VMOVU_MASK %VMM(0), %VMM(7){%k1}{z}
 L(zfill_less_vec):
-	/* Get mask for what we need to set.  */
 	incl	%edx
 	mov	$-1, %VRCX
 	bzhi	%VRDX, %VRCX, %VRCX
 	KMOV	%VRCX, %k1
-	VMOVU_MASK %VZERO, (%rdi){%k1}
+	VMOVU_MASK %VMM(7), (%rdi){%k1}
 	ret
 
 	.p2align 4,, 4
@@ -187,7 +163,6 @@ L(zero_len):
 	.p2align 4,, 8
 L(more_1x_vec):
 # else
-	/* `jb` because length rdx is now length - 1.  */
 	jb	L(less_1x_vec)
 # endif
 
@@ -199,16 +174,10 @@ L(more_1x_vec):
 	VMOVU	%VMM(0), (%rdi)
 
 	vpxorq	%VZERO_128, %VZERO_128, %VZERO_128
-
-	/* Length must be >= CHAR_PER_VEC so match here means we must
-	   zero-fill.  */
 	test	%VRCX, %VRCX
 	jnz	L(zfill)
 
 
-	/* We are going to align rsi here so will need to be able to re-
-	   adjust rdi/rdx afterwords. NB: We filtered out huge lengths
-	   so rsi + rdx * CHAR_SIZE cannot overflow.  */
 	leaq	(VEC_SIZE * -1)(%rsi, %rdx, CHAR_SIZE), %rdx
 	subq	%rsi, %rdi
 	andq	$-(VEC_SIZE), %rsi
@@ -216,7 +185,7 @@ L(more_1x_vec):
 L(loop_last_4x_vec):
 	addq	%rsi, %rdi
 	subq	%rsi, %rdx
-# ifdef USE_AS_WCSCPY
+# if CHAR_SIZE == 4
 	shrq	$2, %rdx
 # endif
 
@@ -224,14 +193,10 @@ L(loop_last_4x_vec):
 	VPTESTN	%VMM(1), %VMM(1), %k0
 	KMOV	%k0, %VRCX
 
-	/* -1 because of the `dec %rdx` earlier.  */
 	cmpq	$(CHAR_PER_VEC * 2 - 1), %rdx
 	ja	L(more_2x_vec)
 
 L(last_2x_vec):
-	/* This will be need to be computed no matter what. We do it
-	   ahead of time for CHAR_PER_VEC == 64 because we can't adjust
-	   the value of `tzcnt` with a shift.  */
 # if CHAR_PER_VEC == 64
 	tzcntq	%rcx, %rcx
 # endif
@@ -239,10 +204,7 @@ L(last_2x_vec):
 	cmpl	$(CHAR_PER_VEC), %edx
 	jb	L(ret_vec_x1_len)
 
-	/* Seperate logic for CHAR_PER_VEC == 64 because we already did
-	   `tzcnt` on VRCX.  */
 # if CHAR_PER_VEC == 64
-	/* cl == CHAR_PER_VEC iff it was zero before the `tzcnt`.  */
 	cmpb	$CHAR_PER_VEC, %cl
 	jnz	L(ret_vec_x1_no_bsf)
 # else
@@ -255,19 +217,15 @@ L(last_2x_vec):
 	VPCMPEQ	(VEC_SIZE * 2)(%rsi), %VZERO, %k0
 	VMOVU	%VMM(1), (VEC_SIZE * 1)(%rdi)
 	KMOV	%k0, %VRCX
-
 # if CHAR_PER_VEC < 64
-	/* This essentiallys adds CHAR_PER_VEC to computed result.  */
 	shlq	$CHAR_PER_VEC, %rcx
 # else
 	tzcntq	%rcx, %rcx
 	addl	$CHAR_PER_VEC, %ecx
 # endif
 
-	.p2align 4,, 4
+
 L(ret_vec_x1_len):
-	/* If CHAR_PER_VEC < 64 we still need to tzcnt, otherwise it has
-	   already been done.  */
 # if CHAR_PER_VEC < 64
 	tzcntq	%rcx, %rcx
 # endif
@@ -296,7 +254,7 @@ L(ret_vec_x1_len_no_zfill):
 	ret
 
 
-	.p2align 4,, 10
+	.p2align 4,, 6
 L(ret_vec_x1):
 	bsf	%VRCX, %VRCX
 L(ret_vec_x1_no_bsf):
@@ -304,7 +262,6 @@ L(ret_vec_x1_no_bsf):
 	subl	%ecx, %edx
 	cmpl	$CHAR_PER_VEC, %edx
 	jb	L(ret_vec_x1_len_no_zfill_mov)
-	/* Fall through (expectation) is copy len < buffer len.  */
 	VMOVU	%VMM(1), (VEC_SIZE * 1)(%rdi)
 	VMOVU	%VZERO, (VEC_SIZE * 1)(%rdi, %rcx, CHAR_SIZE)
 # ifdef USE_AS_STPCPY
@@ -312,11 +269,7 @@ L(ret_vec_x1_no_bsf):
 # endif
 	ret
 
-	.p2align 4,, 8
 L(last_4x_vec):
-	/* Seperate logic for CHAR_PER_VEC == 64 because we can do `andl
-	   $(CHAR_PER_VEC * 4 - 1), %edx` with less code size just
-	   using `movzbl`.  */
 # if CHAR_PER_VEC == 64
 	movzbl	%dl, %edx
 # else
@@ -329,7 +282,7 @@ L(last_4x_vec):
 	subq	$-(VEC_SIZE * 4), %rdi
 	cmpl	$(CHAR_PER_VEC * 2 - 1), %edx
 	jbe	L(last_2x_vec)
-	.p2align 4,, 8
+	.p2align 4,, 12
 L(more_2x_vec):
 	VMOVU	%VMM(1), (VEC_SIZE * 1)(%rdi)
 	test	%VRCX, %VRCX
@@ -437,19 +390,21 @@ L(more_4x_vec):
 	test	%VRCX, %VRCX
 	jnz	L(zfill_vec4)
 
+
 	/* Recheck length before aligning.  */
 	cmpq	$(CHAR_PER_VEC * 8 - 1), %rdx
 	jbe	L(last_4x_vec)
 
-	/* Align rsi to VEC_SIZE * 4, need to readjust rdx / rdi.  */
-# ifdef USE_AS_WCSCPY
+# if CHAR_SIZE != 1
 	leaq	(%rsi, %rdx, CHAR_SIZE), %rdx
 # else
 	addq	%rsi, %rdx
 # endif
 	subq	%rsi, %rdi
-	subq	$-(VEC_SIZE * 5), %rsi
+	subq	$-(VEC_SIZE * 4), %rsi
 	andq	$(VEC_SIZE * -4), %rsi
+
+
 
 	VMOVA	(VEC_SIZE * 0 + 0)(%rsi), %VMM(0)
 	VMOVA	(VEC_SIZE * 1 + 0)(%rsi), %VMM(1)
@@ -462,14 +417,12 @@ L(more_4x_vec):
 	VPTESTN	%VMM(6), %VMM(6), %k4
 
 
-	/* Offset rsi by VEC_SIZE so that we can jump to
-	   L(loop_last_4x_vec).  */
 	addq	$-(VEC_SIZE), %rsi
 	KORTEST	%k2, %k4
 	jnz	L(loop_4x_done)
-
-	/* Store loop end in r9.  */
 	leaq	-(VEC_SIZE * 5 - CHAR_SIZE)(%rdx), %r9
+	// movq    %rdx, %r9
+	// andq    $(VEC_SIZE * -4), %r9
 
 	.p2align 4,, 11
 L(loop_4x_vec):
@@ -495,13 +448,11 @@ L(loop_4x_vec):
 	jz	L(loop_4x_vec)
 
 L(loop_4x_done):
-	/* Restore rdx (length).  */
 	subq	%rsi, %rdx
-# ifdef USE_AS_WCSCPY
+# if CHAR_SIZE == 4
 	shrq	$2, %rdx
 # endif
 	VMOVU	%VMM(0), (VEC_SIZE * 1 + 0)(%rdi, %rsi)
-	/* Restore rdi (dst).  */
 	addq	%rsi, %rdi
 	VPTESTN	%VMM(0), %VMM(0), %k0
 	KMOV	%k0, %VRCX
@@ -531,12 +482,9 @@ L(zfill_vec2):
 	subq	$(VEC_SIZE * -2), %rdi
 	addq	$(CHAR_PER_VEC * -1), %rdx
 L(zfill):
-	/* VRCX must be non-zero.  */
-	bsf	%VRCX, %VRCX
-
-	/* Adjust length / dst for zfill.  */
+	bsf	%rcx, %rcx
 	subq	%rcx, %rdx
-# ifdef USE_AS_WCSCPY
+# if CHAR_SIZE != 1
 	leaq	(%rdi, %rcx, CHAR_SIZE), %rdi
 # else
 	addq	%rcx, %rdi
@@ -545,8 +493,6 @@ L(zfill):
 	movq	%rdi, %rax
 # endif
 L(zfill_from_page_cross):
-
-	/* From here on out its just memset(rdi, 0, rdx).  */
 	cmpq	$CHAR_PER_VEC, %rdx
 	jb	L(zfill_less_vec)
 
@@ -558,8 +504,6 @@ L(zfill_more_1x_vec):
 L(zfill_done0):
 	ret
 
-	/* Coming from vec1/vec2 we must be able to zfill at least 2x
-	   VEC.  */
 	.p2align 4,, 8
 L(zfill_vec3):
 	subq	$(VEC_SIZE * -2), %rdi
@@ -567,15 +511,11 @@ L(zfill_vec3):
 	.p2align 4,, 2
 L(zfill_vec1):
 	bsfq	%rcx, %rcx
-	/* rdi is currently dst - VEC_SIZE so add back VEC_SIZE here.
-	 */
 	leaq	VEC_SIZE(%rdi, %rcx, CHAR_SIZE), %rdi
 	subq	%rcx, %rdx
 # ifdef USE_AS_STPCPY
 	movq	%rdi, %rax
 # endif
-
-
 	VMOVU	%VZERO, (%rdi)
 	VMOVU	%VZERO, (CHAR_SIZE - VEC_SIZE)(%rdi, %rdx, CHAR_SIZE)
 	cmpq	$(CHAR_PER_VEC * 2), %rdx
@@ -586,7 +526,7 @@ L(zfill_more_2x_vec):
 	subq	$(CHAR_PER_VEC * 4 - 1), %rdx
 	jbe	L(zfill_done)
 
-# ifdef USE_AS_WCSCPY
+# if CHAR_SIZE != 1
 	leaq	(%rdi, %rdx, CHAR_SIZE), %rdx
 # else
 	addq	%rdi, %rdx
@@ -603,7 +543,6 @@ L(zfill_more_2x_vec):
 	cmpq	%rdi, %rdx
 	jbe	L(zfill_done)
 
-	/* Align rdi and zfill loop.  */
 	andq	$-(VEC_SIZE), %rdi
 	.p2align 4,, 12
 L(zfill_loop_4x_vec):
@@ -617,23 +556,14 @@ L(zfill_loop_4x_vec):
 L(zfill_done):
 	ret
 
-
-	/* Less 1x VEC case if we are not using evex masked store.  */
 # if !USE_EVEX_MASKED_STORE
 	.p2align 4,, 8
 L(copy_1x):
-	/* Special case for copy 1x. It can be handled quickly and many
-	   buffer sizes have convenient alignment.  */
 	VMOVU	%VMM(0), (%rdi)
-	/* If no zeros then we are done.  */
 	testl	%ecx, %ecx
 	jz	L(ret_1x_1x)
-
-	/* Need to zfill, not we know that length <= CHAR_PER_VEC so we
-	   only handle the small case here.  */
 	bsf	%VRCX, %VRCX
 L(zfill_less_vec_no_bsf):
-	/* Adjust length / dst then just zfill less_vec.  */
 	subq	%rcx, %rdx
 #  ifdef USE_AS_WCSCPY
 	leaq	(%rdi, %rcx, CHAR_SIZE), %rdi
@@ -643,8 +573,10 @@ L(zfill_less_vec_no_bsf):
 #  ifdef USE_AS_STPCPY
 	movq	%rdi, %rax
 #  endif
-
 L(zfill_less_vec):
+	/* We are taking advantage of the fact that to be here we must
+	   be writing null-term as (%rdi, %rcx) we have a byte of lee-
+	   way for overwriting.  */
 	cmpl	$((VEC_SIZE / 2) / CHAR_SIZE), %edx
 	jb	L(zfill_less_half)
 
@@ -665,10 +597,6 @@ L(copy_32_63):
 	VMOVU	-(32 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %VMM_256(1)
 	VMOVU	%VMM_256(0), (%rdi)
 	VMOVU	%VMM_256(1), -(32 - CHAR_SIZE)(%rdi, %rdx, CHAR_SIZE)
-
-	/* We are taking advantage of the fact that to be here we must
-	   be writing null-term as (%rdi, %rcx) we have a byte of lee-
-	   way for overwriting.  */
 	cmpl	%ecx, %edx
 	ja	L(zfill_less_vec_no_bsf)
 #   ifndef USE_AS_STPCPY
@@ -692,13 +620,9 @@ L(copy_16_31):
 	VMOVU	%VMM_128(0), (%rdi)
 	vmovdqu	%xmm1, -(16 - CHAR_SIZE)(%rdi, %rdx, CHAR_SIZE)
 	cmpl	%ecx, %edx
-
-	/* Seperate logic depending on VEC_SIZE. If VEC_SIZE == 64 then
-	   we have a larger copy block for 32-63 so this is just falls
-	   through to zfill 16-31. If VEC_SIZE == 32 then we check for
-	   full zfill of less 1x VEC.  */
 #  if VEC_SIZE == 64
 	jbe	L(ret_16_31)
+
 	subl	%ecx, %edx
 #   ifdef USE_AS_WCSCPY
 	leaq	(%rdi, %rcx, CHAR_SIZE), %rdi
@@ -708,6 +632,8 @@ L(copy_16_31):
 #   ifdef USE_AS_STPCPY
 	movq	%rdi, %rax
 #   endif
+
+
 L(zfill_less_half):
 L(zfill_less_32):
 	cmpl	$(16 / CHAR_SIZE), %edx
@@ -717,6 +643,7 @@ L(zfill_less_32):
 #   ifdef USE_AS_STPCPY
 	ret
 #   endif
+
 L(ret_16_31):
 #   ifdef USE_AS_STPCPY
 #    ifdef USE_AS_WCSCPY
@@ -728,8 +655,9 @@ L(ret_16_31):
 #    endif
 #   endif
 	ret
+
+
 #  else
-	/* VEC_SIZE == 32 begins.  */
 	ja	L(zfill_less_vec_no_bsf)
 #   ifndef USE_AS_STPCPY
 L(ret_1x_1x):
@@ -782,8 +710,8 @@ L(ret_8_15):
 L(less_1x_vec):
 	je	L(copy_1x)
 
-	/* We will need `tzcnt` result for all other copy sizes.  */
 	tzcnt	%VRCX, %VRCX
+
 #  if VEC_SIZE == 64
 	cmpl	$(32 / CHAR_SIZE), %edx
 	jae	L(copy_32_63)
@@ -817,6 +745,7 @@ L(zfill_less_8):
 	movl	%ecx, (%rdi)
 	movl	%ecx, (%rdi, %rdx, CHAR_SIZE)
 	ret
+
 #  else
 	cmpl	$3, %edx
 	jb	L(copy_0_3)
@@ -902,10 +831,12 @@ L(zfill_from_1):
 
 	.p2align 4,, 4
 L(zero_len):
-	incq	%rdx
+	cmpq	$-1, %rdx
 	jne	L(best_effort_strncpy)
 	movq	%rdi, %rax
 	ret
+
+
 # endif
 
 
@@ -924,26 +855,17 @@ L(page_cross):
 # else
 	shrx	%VRSI, %VRCX, %VRCX
 # endif
-
-	/* Compute amount of bytes we checked.  */
 	subl	%esi, %eax
 	andl	$(VEC_SIZE - 1), %eax
-# ifdef USE_AS_WCSCPY
+# if CHAR_SIZE == 4
 	shrl	$2, %eax
 # endif
-
-	/* If rax > rdx then we are finishing the copy at the end of the
-	   page.  */
 	cmpq	%rax, %rdx
 	jb	L(page_cross_small)
-
-
-	/* If rcx is non-zero then continue.  */
+	/* Optimizing aggressively for space as this is very cold code.
+	   This saves 2x cache lines.  */
 	test	%VRCX, %VRCX
 	jz	L(page_cross_continue)
-
-	/* We found zero-CHAR so need to copy then zfill (we know we
-	   didn't cover all of length here).  */
 	bsf	%VRCX, %VRCX
 L(movsb_and_zfill):
 	incl	%ecx
@@ -953,8 +875,12 @@ L(movsb_and_zfill):
 # else
 	movq	%rdi, %rax
 # endif
+# ifdef USE_AS_WCSCPY
+	rep	movsd
+# else
+	rep	movsb
+# endif
 
-	REP_MOVS
 # if USE_AS_WCSCPY
 	movl	$0, (%rdi)
 # else
@@ -965,20 +891,7 @@ L(movsb_and_zfill):
 L(page_cross_small):
 	tzcnt	%VRCX, %VRCX
 	cmpl	%ecx, %edx
-	jbe	L(page_cross_copy_only)
-	/* Do a zfill of the tail before copying.  */
-	movq	%rdi, %r9
-	xorl	%eax, %eax
-
-	movl	%ecx, %r8d
-
-	subl	%ecx, %edx
-	leaq	CHAR_SIZE(%rdi, %rcx, CHAR_SIZE), %rdi
-	movl	%edx, %ecx
-	REP_STOS
-	movq	%r9, %rdi
-	movl	%r8d, %edx
-L(page_cross_copy_only):
+	ja	L(movsb_and_zfill)
 	leal	1(%rdx), %ecx
 # ifdef USE_AS_STPCPY
 #  ifdef USE_AS_WCSCPY
@@ -991,19 +904,40 @@ L(page_cross_copy_only):
 # else
 	movq	%rdi, %rax
 # endif
-	REP_MOVS
+# ifdef USE_AS_WCSCPY
+	rep	movsd
+# else
+	rep	movsb
+# endif
 	ret
 
 
 L(best_effort_strncpy):
-	movq	%rdx, %rcx
+# if 0
+	leaq	1(%rdx), %rcx
 	xorl	%eax, %eax
 	movq	%rdi, %r8
 	/* The length is >= 2^63. We very much so expect to segfault at
 	   rep stos. If that doesn't happen then just strcpy to finish.
 	 */
-	REP_STOS
+#  ifdef USE_AS_WCSCPY
+	rep	stosl
 	movq	%r8, %rdi
-	jmp	OVERFLOW_STRCPY
+#   ifdef USE_AS_STPCPY
+	jmp	__wcpcpy_evex
+#   else
+	jmp	__wcscpy_evex
+#   endif
+#  else
+	rep	stosb
+	movq	%r8, %rdi
+#   ifdef USE_AS_STPCPY
+	jmp	__stpcpy_evex
+#   else
+	jmp	__strcpy_evex
+#   endif
+#  endif
+# endif
+
 END(STRCPY)
 #endif

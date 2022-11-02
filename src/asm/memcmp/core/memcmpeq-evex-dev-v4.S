@@ -38,7 +38,7 @@
 # endif
 
 # ifndef VEC_SIZE
-#  include "../../libc-defs/libc-evex256-vecs.h"
+#  include "../../libc-defs/libc-evex512-vecs.h"
 # endif
 # include "../../libc-defs/libc-reg-macros.h"
 # if VEC_SIZE == 32
@@ -104,6 +104,14 @@ L(return_neq0):
 L(zero):
 	ret
 
+	.p2align 4,, 3
+L(last_1x_vec):
+	VMOVU	-(VEC_SIZE * 1-(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
+	VPCMP	$4, -(VEC_SIZE * 1-(VEC_SIZE * 2))(%rdi, %rdx), %VMM(1), %k1
+	KMOV	%k1, %VRAX
+	TO_32BIT (VRAX)
+	ret
+
 
 	.p2align 4,, 12
 L(more_1x_vec):
@@ -149,8 +157,8 @@ L(more_1x_vec):
 	/* Handle remainder of size = 4 * VEC + 1 to 8 * VEC without any
 	   branches.  */
 
-	VMOVU	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
-	VMOVU	-(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(2)
+	VMOVU	-(VEC_SIZE * 1 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
+	VMOVU	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(2)
 	addq	%rdx, %rdi
 
 	/* Wait to load from s1 until addressed adjust due to
@@ -158,22 +166,22 @@ L(more_1x_vec):
 
 	/* vpxor will be all 0s if s1 and s2 are equal. Otherwise it
 	   will have some 1s.  */
-	vpxorq	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(1)
+	vpxorq	-(VEC_SIZE * 1 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(1)
 	/* Ternary logic to xor -(VEC_SIZE * 3)(%rdi) with VEC(2) while
 	   oring with VEC(1). Result is stored in VEC(1).  */
-	vpternlogd $0xde, -(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(2)
+	vpternlogd $0xde, -(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(2)
 # if VEC_SIZE == 64
-	cmpl	$(VEC_SIZE * 4), %edx
+	cmpl	$(VEC_SIZE * 6 -(VEC_SIZE * 2)), %edx
 	jbe	L(4x_last_2x_vec)
 # else
-	cmpb	$(VEC_SIZE * 4), %dl
+	cmpb	$(VEC_SIZE * 6 -(VEC_SIZE * 2)), %dl
 	jbe	L(4x_last_2x_vec)
 # endif
-	VMOVU	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(3)
-	vpxorq	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rdi), %VMM(3), %VMM(3)
+	VMOVU	-(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(3)
+	vpxorq	-(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rdi), %VMM(3), %VMM(3)
 	/* Or together VEC(1), VEC(2), and VEC(3) into VEC(3).  */
-	VMOVU	-(VEC_SIZE -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(4)
-	vpxorq	-(VEC_SIZE -(VEC_SIZE * 2))(%rdi), %VMM(4), %VMM(4)
+	VMOVU	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(4)
+	vpxorq	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rdi), %VMM(4), %VMM(4)
 
 	/* Or together VEC(4), VEC(3), and VEC(2) into VEC(2).  */
 	vpternlogd $0xfe, %VMM(4), %VMM(3), %VMM(2)
@@ -185,9 +193,8 @@ L(4x_last_2x_vec):
 	TO_32BIT (VRAX)
 	ret
 
-# if VEC_SIZE == 32
+
 	.p2align 4
-# endif
 L(more_8x_vec):
 	/* Set end of s1 in rdx.  */
 	leaq	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rdi, %rdx), %rdx
@@ -198,7 +205,7 @@ L(more_8x_vec):
 	andq	$-VEC_SIZE, %rdi
 	/* Adjust because first 4x vec where check already.  */
 	subq	$-(VEC_SIZE * 4), %rdi
-	.p2align 4
+	.p2align 4,, 10
 L(loop_4x_vec):
 	VMOVU	(%rsi, %rdi), %VMM(1)
 	vpxorq	(%rdi), %VMM(1), %VMM(1)
@@ -222,40 +229,26 @@ L(loop_4x_vec):
 	jb	L(loop_4x_vec)
 
 	subq	%rdx, %rdi
-# if VEC_SIZE == 64
-	addq	%rdx, %rsi
-# endif
 
 
-	VMOVU	(VEC_SIZE * 3)(S1_ACCESS_END), %VMM(4)
-	vpxorq	(VEC_SIZE * 3)(%rdx), %VMM(4), %VMM(4)
+	VMOVU	(VEC_SIZE * 3)(%rsi, %rdx), %VMM(1)
+	vpxorq	(VEC_SIZE * 3)(%rdx), %VMM(1), %VMM(1)
 	/* rdi has 4 * VEC_SIZE - remaining length.  */
-# if VEC_SIZE == 64
 	cmpl	$(VEC_SIZE * 3), %edi
 	jge	L(8x_last_1x_vec)
-# endif
 	/* Load regardless of branch.  */
-	VMOVU	(VEC_SIZE * 2)(S1_ACCESS_END), %VMM(3)
+	VMOVU	(VEC_SIZE * 2)(%rsi, %rdx), %VMM(2)
 	/* Ternary logic to xor (VEC_SIZE * 2)(%rdx) with VEC(3) while
 	   oring with VEC(4). Result is stored in VEC(4).  */
-	vpternlogd $0xf6, (VEC_SIZE * 2)(%rdx), %VMM(3), %VMM(4)
+	vpternlogd $0xf6, (VEC_SIZE * 2)(%rdx), %VMM(1), %VMM(2)
 # if VEC_SIZE == 64
 	testb	%dil, %dil
-	js	L(8x_last_2x_vec)
+	jns	L(8x_last_2x_vec)
 # else
 	cmpl	$(VEC_SIZE * 2 + CMP_END_OFFSET), %edi
-	jge	L(8x_last_2x_vec)
+	jl	L(8x_last_2x_vec)
 # endif
-
-	VMOVU	VEC_SIZE(S1_ACCESS_END), %VMM(2)
-	vpxorq	VEC_SIZE(%rdx), %VMM(2), %VMM(2)
-
-	VMOVU	(S1_ACCESS_END), %VMM(1)
-	vpxorq	(%rdx), %VMM(1), %VMM(1)
-
-	vpternlogd $0xfe, %VMM(1), %VMM(2), %VMM(4)
 L(8x_last_1x_vec):
-L(8x_last_2x_vec):
 	VPTEST	%VMM(4), %VMM(4), %k1
 	KMOV	%k1, %VRAX
 	TO_32BIT_P1 (rax)
@@ -263,15 +256,7 @@ L(return_neq2):
 	TO_32BIT_P2 (rax)
 	ret
 
-	.p2align 4,, 3
-L(last_1x_vec):
-	VMOVU	-(VEC_SIZE * 0)(%rsi, %rdx), %VMM(1)
-	VPCMP	$4, -(VEC_SIZE * 0)(%rdi, %rdx), %VMM(1), %k1
-	KMOV	%k1, %VRAX
-	TO_32BIT (VRAX)
-	ret
-
-	.p2align 4,, 8
+	.p2align 4,, 12
 L(last_2x_vec):
 	VMOVU	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
 	vpxorq	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rdi, %rdx), %VMM(1), %VMM(1)
@@ -281,7 +266,6 @@ L(last_2x_vec):
 	KMOV	%k1, %VRAX
 	TO_32BIT (VRAX)
 	ret
-
 
 
 	/* evex256: 1 Bytes from next cache line. evex512: 15 Bytes from

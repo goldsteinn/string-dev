@@ -57,8 +57,10 @@
 # endif
 # ifdef USE_AS_STRCAT
 #  define PAGE_ALIGN_REG	edx
+#  define PAGE_ALIGN_REG_64	rdx
 # else
 #  define PAGE_ALIGN_REG	eax
+#  define PAGE_ALIGN_REG_64	rax
 # endif
 
 # define VZERO	VMM(7)
@@ -139,14 +141,13 @@ L(bsf_and_done_v0):
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %PAGE_ALIGN_REG
 	ja	L(page_cross)
 L(page_cross_continue):
-
 	VMOVU	(%rsi), %VMM(0)
 # if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
 	movq	%rdi, %rax
 # endif
 
 
-# if 0
+# if 1
 	VPTEST	%VMM(0), %VMM(0), %k0
 	KMOV	%k0, %VRCX
 #  ifdef USE_AS_WCSCPY
@@ -462,11 +463,11 @@ L(page_cross):
 	andl	$(VEC_SIZE - 1), %PAGE_ALIGN_REG
 	shrl	$2, %PAGE_ALIGN_REG
 # endif
-	shrxl	%PAGE_ALIGN_REG, %ecx, %ecx
+	shrx	%VGPR(PAGE_ALIGN_REG_64), %VRCX, %VRCX
 # if 1
 	/* Optimizing aggressively for space as this is very cold code.
 	   This saves 2x cache lines.  */
-	shll	%ecx
+	shl	%VRCX
 	jz	L(page_cross_continue)
 #  if !defined USE_AS_STPCPY && !defined USE_AS_STRCAT
 	movq	%rdi, %rax
@@ -482,12 +483,8 @@ L(page_cross):
 	leaq	-CHAR_SIZE(%rdi), %rax
 #  endif
 
-#  if defined USE_AS_STPCPY || defined USE_AS_STRCAT
 	ret
-#  else
-	jmp	L(return_end)
 	/* 0 bytes until next cache line.  */
-#  endif
 
 
 # else
@@ -503,7 +500,6 @@ L(page_cross):
 #  elif !defined USE_AS_STRCAT
 	movq	%rdi, %rax
 #  endif
-
 
 	testw	%cx, %cx
 	jz	L(page_cross_copy_16_31)

@@ -16,7 +16,7 @@ typedef struct func_decl {
     };
 } func_decl_t;
 
-typedef void (*run_decl_f)(const func_decl_t *);
+typedef void * (*run_decl_f)(void *);
 
 typedef struct decl_list {
     const uint64_t ndecls;

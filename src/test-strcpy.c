@@ -40,7 +40,8 @@
                               CAST(char const *, src))))))
 
 #define strcat_expec_ret(s1_, s1_start_, sz_)                                  \
-    ((s1_start_) + (((((s1_) - (s1_start_)) * 15) / 16) & (-CAST(uint64_t, sz_))))
+    ((s1_start_) +                                                             \
+     (((((s1_) - (s1_start_)) * 15) / 16) & (-CAST(uint64_t, sz_))))
 
 static int32_t
 check_strcat(const uint8_t * s1_start,
@@ -299,7 +300,7 @@ check_stpncpy(const uint8_t * s1_start,
     }
 
 
-   uint64_t end_region = MIN(len, n);
+    uint64_t end_region = MIN(len, n);
     if (check_sentinel(s1_start, s1, START)) {
         fprintf(stderr, "Start Sentinel Error\n");
         return 1;
@@ -692,9 +693,9 @@ typedef FUNC_T(check_strcpy) check_func_t;
 #define INIT_I 0
 #define INIT_J 0
 #define INIT_K 0
-#define INIT_N 33
+#define INIT_N 0
 
-#define VPRINT(...) fprintf(stderr, __VA_ARGS__)
+// #define VPRINT(...) fprintf(stderr, __VA_ARGS__)
 #ifndef VPRINT
 #define VPRINT(...)
 #endif
@@ -717,8 +718,8 @@ test_strcpy_kernel(uint64_t     test_size,
     die_assert(wsize == 1 || wsize == 4);
 
     memset_c(s1, 0xff, test_size);
-
     init_region(s2, test_size);
+
     uint8_t  zbytes[4] = { 0 };
     uint8_t *test1, *test2;
     uint64_t al_pairs[NPAIRS * 2] = { 0 };
@@ -745,6 +746,8 @@ test_strcpy_kernel(uint64_t     test_size,
                 PRINTFFL;
                 memset(test2 + j, 0, wsize);
                 PRINTFFL;
+
+
                 uint8_t * r = run(test1, test2, j);
                 PRINTFFL;
                 test_assert(
@@ -861,6 +864,8 @@ test_strncpy_kernel(uint64_t     test_size,
                     PRINTFFL;
                     memcpy(test2 + j, zbytes, wsize);
                     init_f(s1, s1 + test_size, test1, ULONG_MAX, n);
+
+
                     r = run(test1, test2, n);
                     test_assert(check_f(s1, s1 + test_size, test1, test2, r, n,
                                         ULONG_MAX) == 0,

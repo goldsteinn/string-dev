@@ -43,8 +43,6 @@
 # include "../../libc-defs/libc-reg-macros.h"
 # if VEC_SIZE == 32
 #  define S1_ACCESS_END	%rsi, %rdx
-#  define CMP_END	cmpl
-#  define CMP_END_OFFSET	0
 
 #  define TEST_ZERO(reg)	test %VGPR(reg), %VGPR(reg)
 #  define TO_32BIT_P1(reg)	/* Do nothing. */
@@ -52,11 +50,6 @@
 #  define TO_32BIT(reg)	/* Do nothing. */
 # elif VEC_SIZE == 64
 #  define S1_ACCESS_END	%rsi
-	// #  define CMP_END       subl
-	// #  define CMP_END_OFFSET        (VEC_SIZE * -3)
-
-#  define CMP_END	cmpl
-#  define CMP_END_OFFSET	0
 
 #  define TEST_ZERO(reg)	neg %VGPR(reg)
 #  define TO_32BIT_P1(reg)	TEST_ZERO(reg)
@@ -89,7 +82,6 @@ ENTRY_P2ALIGN(MEMCMPEQ, 6)
 	   for page crosses/zero size.  */
 	mov	$-1, %VRAX
 	bzhi	%VRDX, %VRAX, %VRAX
-	jz	L(zero)
 	KMOV	%VRAX, %k2
 
 	/* Use masked loads as VEC_SIZE could page cross where length
@@ -101,9 +93,7 @@ ENTRY_P2ALIGN(MEMCMPEQ, 6)
 	TO_32BIT_P1 (rax)
 L(return_neq0):
 	TO_32BIT_P2 (rax)
-L(zero):
 	ret
-
 
 	.p2align 4,, 12
 L(more_1x_vec):
@@ -149,8 +139,8 @@ L(more_1x_vec):
 	/* Handle remainder of size = 4 * VEC + 1 to 8 * VEC without any
 	   branches.  */
 
-	VMOVU	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
-	VMOVU	-(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(2)
+	VMOVU	-(VEC_SIZE * 1 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
+	VMOVU	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(2)
 	addq	%rdx, %rdi
 
 	/* Wait to load from s1 until addressed adjust due to
@@ -158,22 +148,22 @@ L(more_1x_vec):
 
 	/* vpxor will be all 0s if s1 and s2 are equal. Otherwise it
 	   will have some 1s.  */
-	vpxorq	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(1)
+	vpxorq	-(VEC_SIZE * 1 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(1)
 	/* Ternary logic to xor -(VEC_SIZE * 3)(%rdi) with VEC(2) while
 	   oring with VEC(1). Result is stored in VEC(1).  */
-	vpternlogd $0xde, -(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(2)
+	vpternlogd $0xde, -(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rdi), %VMM(1), %VMM(2)
 # if VEC_SIZE == 64
-	cmpl	$(VEC_SIZE * 4), %edx
+	cmpl	$(VEC_SIZE * 6 -(VEC_SIZE * 2)), %edx
 	jbe	L(4x_last_2x_vec)
 # else
-	cmpb	$(VEC_SIZE * 4), %dl
+	cmpb	$(VEC_SIZE * 6 -(VEC_SIZE * 2)), %dl
 	jbe	L(4x_last_2x_vec)
 # endif
-	VMOVU	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(3)
-	vpxorq	-(VEC_SIZE * 2 -(VEC_SIZE * 2))(%rdi), %VMM(3), %VMM(3)
+	VMOVU	-(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(3)
+	vpxorq	-(VEC_SIZE * 3 -(VEC_SIZE * 2))(%rdi), %VMM(3), %VMM(3)
 	/* Or together VEC(1), VEC(2), and VEC(3) into VEC(3).  */
-	VMOVU	-(VEC_SIZE -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(4)
-	vpxorq	-(VEC_SIZE -(VEC_SIZE * 2))(%rdi), %VMM(4), %VMM(4)
+	VMOVU	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rsi, %rdx), %VMM(4)
+	vpxorq	-(VEC_SIZE * 4 -(VEC_SIZE * 2))(%rdi), %VMM(4), %VMM(4)
 
 	/* Or together VEC(4), VEC(3), and VEC(2) into VEC(2).  */
 	vpternlogd $0xfe, %VMM(4), %VMM(3), %VMM(2)
@@ -243,7 +233,7 @@ L(loop_4x_vec):
 	testb	%dil, %dil
 	js	L(8x_last_2x_vec)
 # else
-	cmpl	$(VEC_SIZE * 2 + CMP_END_OFFSET), %edi
+	cmpl	$(VEC_SIZE * 2), %edi
 	jge	L(8x_last_2x_vec)
 # endif
 
@@ -265,8 +255,8 @@ L(return_neq2):
 
 	.p2align 4,, 3
 L(last_1x_vec):
-	VMOVU	-(VEC_SIZE * 0)(%rsi, %rdx), %VMM(1)
-	VPCMP	$4, -(VEC_SIZE * 0)(%rdi, %rdx), %VMM(1), %k1
+	VMOVU	-(VEC_SIZE * 1-(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
+	VPCMP	$4, -(VEC_SIZE * 1-(VEC_SIZE * 2))(%rdi, %rdx), %VMM(1), %k1
 	KMOV	%k1, %VRAX
 	TO_32BIT (VRAX)
 	ret

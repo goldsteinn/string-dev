@@ -3,3 +3,4 @@
 #define	STRCPY strncpy_evex512_dev
 #define	STRCAT STRCPY
 #include "core/strncpy-evex-dev.S"
+

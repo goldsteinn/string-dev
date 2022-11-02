@@ -38,7 +38,7 @@
 # endif
 
 # ifndef VEC_SIZE
-#  include "../../libc-defs/libc-evex256-vecs.h"
+#  include "../../libc-defs/libc-evex512-vecs.h"
 # endif
 # include "../../libc-defs/libc-reg-macros.h"
 # if VEC_SIZE == 32
@@ -265,8 +265,8 @@ L(return_neq2):
 
 	.p2align 4,, 3
 L(last_1x_vec):
-	VMOVU	-(VEC_SIZE * 0)(%rsi, %rdx), %VMM(1)
-	VPCMP	$4, -(VEC_SIZE * 0)(%rdi, %rdx), %VMM(1), %k1
+	VMOVU	-(VEC_SIZE * 1-(VEC_SIZE * 2))(%rsi, %rdx), %VMM(1)
+	VPCMP	$4, -(VEC_SIZE * 1-(VEC_SIZE * 2))(%rdi, %rdx), %VMM(1), %k1
 	KMOV	%k1, %VRAX
 	TO_32BIT (VRAX)
 	ret

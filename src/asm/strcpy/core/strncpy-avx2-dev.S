@@ -115,6 +115,8 @@ ENTRY(STRCPY)
 	ja	L(page_cross)
 
 L(page_cross_continue):
+
+
 	VMOVU	(%rsi), %ymm0
 	VPCMPEQ	%ymm0, %ymm7, %ymm6
 	vpmovmskb %ymm6, %ecx
@@ -562,9 +564,10 @@ L(less_1x_vec):
 	testl	%ecx, %ecx
 	jz	L(zfill_less_8_set_ret)
 
-	movl	(%rsi, %rdx), %ecx
+	movl	(%rsi, %rdx), %esi
 	vmovd	%xmm0, (%rdi)
-	movl	%ecx, (%rdi, %rdx)
+	movl	%esi, (%rdi, %rdx)
+
 #  ifdef USE_AS_STPCPY
 	cmpl	%ecx, %edx
 L(ret_8_15):
@@ -574,6 +577,7 @@ L(ret_8_15):
 #  endif
 	ret
 L(zfill_less_8_set_ret):
+	xorl	%ecx, %ecx
 #  ifdef USE_AS_STPCPY
 	movq	%rdi, %rax
 #  endif
@@ -711,12 +715,13 @@ L(movsb_and_zfill):
 	jmp	L(zfill_from_page_cross)
 
 L(page_cross_small):
-	tzcntl	%ecx, %ecx
+	tzcnt	%ecx, %ecx
 	cmpl	%ecx, %edx
 	ja	L(movsb_and_zfill)
 	leal	CHAR_SIZE(%rdx), %ecx
 # ifdef USE_AS_STPCPY
 #  ifdef USE_AS_WCSCPY
+	/* Clear without setting flags.  */
 	movl	$0, %eax
 	setc	%al
 	addq	%rdi, %rdx
@@ -730,8 +735,38 @@ L(page_cross_small):
 # endif
 
 
+
+
 	rep	movsb
 	VZEROUPPER_RETURN
+
+L(best_effort_strncpy):
+# if 0
+	leaq	1(%rdx), %rcx
+	xorl	%eax, %eax
+	movq	%rdi, %r8
+	/* The length is >= 2^63. We very much so expect to segfault at
+	   rep stos. If that doesn't happen then just strcpy to finish.
+	 */
+#  ifdef USE_AS_WCSCPY
+	rep	stosl
+	movq	%r8, %rdi
+#   ifdef USE_AS_STPCPY
+	jmp	__wcpcpy_avx2
+#   else
+	jmp	__wcscpy_avx2
+#   endif
+#  else
+	rep	stosb
+	movq	%r8, %rdi
+#   ifdef USE_AS_STPCPY
+	jmp	__stpcpy_avx2
+#   else
+	jmp	__strcpy_avx2
+#   endif
+#  endif
+# endif
+
 
 
 END(STRCPY)

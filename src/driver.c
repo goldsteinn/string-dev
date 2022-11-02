@@ -9,6 +9,8 @@
 #include "string-bench-common.h"
 #include "string-func-info.h"
 
+#include <pthread.h>
+#include <semaphore.h>
 extern const decl_list_t string_decls;
 
 static int32_t verbosity;
@@ -32,6 +34,8 @@ static uint32_t bench_rand = 0;
 
 static arg_rest_t todo = INIT_ARG_REST_T;
 
+static uint32_t parallel = 0;
+
 
 static ArgOption args[] = {
     /* ADD_ARG(Kind, Method, name, reqd, variable, help) */
@@ -42,6 +46,7 @@ static ArgOption args[] = {
             0,
             &bench_cpu,
             "Bench cpu (-1 to ignore)"),
+    ADD_ARG(KindOption, Integer, ("-j"), 0, &parallel, "Num threads"),
     ADD_ARG(KindOption, Set, ("--list"), 0, &do_list, "List all possibilities"),
     ADD_ARG(KindOption, Set, ("--test"), 0, &do_test, "Run tests"),
     ADD_ARG(KindOption, Set, ("--bench"), 0, &do_bench, "Run benchmarks"),
@@ -126,6 +131,7 @@ static ArgOption args[] = {
 static ArgDefs argp = { args, "C / ASM Wrapper", NULL, NULL };
 
 static bench_info_t common_binfo ALIGNED(64);
+static sem_t                     sem;
 
 static void
 set_bench_cpu(int32_t cpu) {
@@ -134,8 +140,10 @@ set_bench_cpu(int32_t cpu) {
     }
 }
 
-static void
-run_test(func_decl_t const * decl) {
+
+static void *
+run_test(void const * arg) {
+    func_decl_t const * decl  = (func_decl_t const *)arg;
     char const *        res   = "PASSED";
     func_info_t const * finfo = CAST(func_info_t const *, decl->data);
     printf("Testing - %-24s ...", decl->name);
@@ -145,10 +153,21 @@ run_test(func_decl_t const * decl) {
     }
     printf("\rTesting - %-24s -> %s\n", decl->name, res);
     fflush(stdout);
+    return NULL;
 }
 
-static void
-run_bench(func_decl_t const * decl) {
+static void *
+thr_run_test(void * arg) {
+    pthread_detach(pthread_self());
+    run_test((func_decl_t const *)arg);
+    sem_post(&sem);
+    return NULL;
+}
+
+
+static void *
+run_bench(void * arg) {
+    func_decl_t const * decl  = (func_decl_t const *)arg;
     func_info_t const * finfo = CAST(func_info_t const *, decl->data);
     ll_time_t           time  = 0;
     printf("Benchmarking - %-24s ...", decl->name);
@@ -159,11 +178,14 @@ run_bench(func_decl_t const * decl) {
     printf("\rBenchmarking - %-24s -> %10.3f\n", decl->name,
            time_per_trial(time, bench_trials));
     fflush(stdout);
+    return NULL;
 }
 
 
 int
 main(int argc, char * argv[]) {
+
+
     die_assert(!doParse(&argp, argc, argv), "Error parsing arguments\n");
     set_verbosity(verbosity);
 
@@ -181,8 +203,17 @@ main(int argc, char * argv[]) {
                               bench_make_todo(bench_lat, bench_rand));
         }
 
-        run_decls(&string_decls, run_all ? NULL : todo.ptrs, todo.n,
-                  do_test ? &run_test : &run_bench);
+        if (parallel > ((3 * get_nprocs()) / 2)) {
+            parallel = ((3 * get_nprocs()) / 2);
+        }
+        if (parallel == 0) {
+            parallel = 1;
+        }
+
+        err_assert(sem_init(&sem, 0, parallel) == 0);
+
+        run_decls(&string_decls, run_all ? NULL : todo.ptrs, todo.n, &sem,
+                  do_test ? &thr_run_test : &run_bench);
     }
 
 

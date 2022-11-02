@@ -4,8 +4,10 @@
 #include "util/memory-util.h"
 #include "util/regex-util.h"
 
+#include <pthread.h>
+#include <semaphore.h>
 #include <stdint.h>
-
+#include <unistd.h>
 
 enum { decl_do_nothing = 0, decl_re_built = 2, decl_ran = 4 };
 enum { decl_did_one = 1, decl_did_any = 0 };
@@ -122,11 +124,15 @@ void
 run_decls(decl_list_t const * restrict decl_list,
           char * restrict const * restrict decls_to_run,
           uint64_t         ndecls_to_run,
+          sem_t *          sem,
           const run_decl_f run_decl_func) {
     uint64_t            i, ndecls;
-    const func_decl_t * decls;
+    func_decl_t const * decls;
     regex_t             re_matchers[ndecls_to_run];
     uint8_t             decl_states[ndecls_to_run], decl_state;
+    pthread_attr_t      attr;
+    pthread_t           tids;
+    int32_t             init_v;
     memset_c(decl_states, 0, ndecls_to_run);
 
 
@@ -135,17 +141,40 @@ run_decls(decl_list_t const * restrict decl_list,
 
     ndecls = decl_list->ndecls;
     decls  = decl_list->decls;
+
+    err_assert(pthread_attr_init(&attr) == 0);
+    err_assert(pthread_attr_setstacksize(&attr, 131072) == 0);
+    err_assert(sem_getvalue(sem, &init_v) == 0);
+
     for (i = 0; i < ndecls; ++i) {
         die_assert(decls[i].name && decls[i].data,
                    "Error, unitialized decl struct!\n");
         if (should_run_decl(decls[i].name, decls_to_run, ndecls_to_run,
                             decl_states, re_matchers)) {
-            run_decl_func(decls + i);
+            err_assert(sem_wait(sem) == 0);
+            void *       tmp0;
+            void const * tmp1;
+            tmp1 = (void const *)(decls + i);
+            memcpy(&tmp0, &tmp1, sizeof(tmp0));
+            err_assert(pthread_create(&tids, &attr, run_decl_func, tmp0) ==
+                       0);
         }
     }
+
+    for (;;) {
+        int32_t v;
+        err_assert(sem_getvalue(sem, &v) == 0);
+        if (v == init_v) {
+            break;
+        }
+        usleep(500 * 1000);
+    }
+    pthread_attr_destroy(&attr);
     if (!decls_to_run) {
         return;
     }
+
+
     for (i = 0; i < ndecls_to_run; ++i) {
         die_assert(decls_to_run[i]);
         decl_state = decl_states[i];

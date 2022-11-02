@@ -91,6 +91,8 @@ static void
 init_region(uint8_t * s2, uint64_t len) {
     for (uint64_t i = 0; i < len; ++i) {
         s2[i] = GET_EXPEC(s2, i);
+        assert(s2[i] != 0);
+        assert(s2[i] < 255);
     }
 }
 

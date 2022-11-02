@@ -32,9 +32,6 @@
 #  define VPTEST	vptestmd
 #  define VPCMPEQ	vpcmpeqd
 #  define CHAR_SIZE	4
-
-#  define VMASK_REG	VR10
-#  define FIND_FIRST_ONE(src, dst)	movl $CHAR_PER_VEC, %dst; bsf %src, %dst
 # else
 
 #  define VPMIN	vpminub
@@ -42,9 +39,6 @@
 #  define VPTEST	vptestmb
 #  define VPCMPEQ	vpcmpeqb
 #  define CHAR_SIZE	1
-
-#  define VMASK_REG	VRCX
-#  define FIND_FIRST_ONE(src, dst)	tzcnt %src, %dst
 # endif
 
 # include "../../libc-defs/libc-reg-macros.h"
@@ -61,17 +55,14 @@
 
 	.section SECTION(.text), "ax", @progbits
 ENTRY(STRCPY)
+# if CHAR_SIZE != 0
+	movq	%rdx, %rax
+	shrq	$56, %rax
+	jnz	wcscat_evex_dev
+# endif
 	movq	%rdi, %rax
-# if CHAR_SIZE != 1
-	decq	%rdx
-	movq	%rdx, %rcx
-	shrq	$56, %rcx
-	jnz	L(zero_len)
-# else
 	decq	%rdx
 	jl	L(zero_len)
-# endif
-
 
 	vpxorq	%VZERO_128, %VZERO_128, %VZERO_128
 	/* Paired down strlen implementation.  We never commit to 4x
@@ -134,6 +125,8 @@ L(bsf_and_done_v0):
 	addq	%rcx, %rdi
 # endif
 
+
+
 	movl	%esi, %ecx
 	andl	$(PAGE_SIZE - 1), %ecx
 	cmpl	$(PAGE_SIZE - VEC_SIZE), %ecx
@@ -141,28 +134,45 @@ L(bsf_and_done_v0):
 L(page_cross_continue):
 	VMOVU	(%rsi), %VMM(0)
 	VPTESTN	%VMM(0), %VMM(0), %k0
-	KMOV	%k0, %VMASK_REG
-	FIND_FIRST_ONE (VMASK_REG, VRCX)
-	cmpq	%rcx, %rdx
+	KMOV	%k0, %VRCX
+
+	cmpq	$CHAR_PER_VEC, %rdx
 	jb	L(less_1x_vec)
 
-	cmpl	$CHAR_PER_VEC, %ecx
+	test	%VRCX, %VRCX
 	je	L(more_1x_vec)
 
-	movl	%ecx, %edx
+	bsfl	%ecx, %edx
 
-L(less_1x_vec):
+
+
 # if VEC_SIZE == 64
-	cmpl	$(32 / CHAR_SIZE - 1), %edx
-	jae	L(copy_32_63)
+#  if CHAR_SIZE == 4
+	testb	%cl, %cl
+#  else
+	testl	%ecx, %ecx
+#  endif
+	jz	L(copy_32_63)
+L(copy_less_half):
 # endif
 
-	cmpl	$(16 / CHAR_SIZE - 1), %edx
-	jae	L(copy_16_31)
+# if CHAR_SIZE == 4
+	testb	$0xf, %cl
+# else
+	testw	%cx, %cx
+# endif
+	jz	L(copy_16_31)
+# if VEC_SIZE != 64
+L(copy_less_half):
+# endif
 
 
-	cmpl	$(8 / CHAR_SIZE - 1), %edx
-	jae	L(copy_8_15)
+# if CHAR_SIZE == 4
+	testb	$0x3, %cl
+# else
+	testb	%cl, %cl
+# endif
+	jz	L(copy_8_15)
 
 # ifdef USE_AS_WCSCPY
 	movl	-(4 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %ecx
@@ -171,7 +181,7 @@ L(less_1x_vec):
 	ret
 # else
 
-	cmpl	$3, %edx
+	testb	$0x7, %cl
 	jae	L(copy_4_7)
 
 	movzbl	(%rsi, %rdx), %ecx
@@ -189,6 +199,21 @@ L(set_null_term):
 	movb	%cl, (%rdi, %rdx)
 	ret
 # endif
+
+L(less_1x_vec):
+
+	bts	%VRDX, %VRCX
+	bsf	%VRCX, %VRDX
+# if CHAR_PER_VEC == 8
+	testb	$0xf, %cl
+# elif CHAR_PER_VEC == 16
+	testb	%cl, %cl
+# elif CHAR_PER_VEC == 32
+	testw	%cx, %cx
+# else
+	testl	%ecx, %ecx
+# endif
+	jnz	L(copy_less_half)
 
 # if VEC_SIZE == 64
 	.p2align 4,, 6
@@ -235,8 +260,6 @@ L(more_1x_vec):
 	leaq	(VEC_SIZE * -1)(%rsi, %rdx, CHAR_SIZE), %rdx
 	subq	%rsi, %rdi
 	andq	$-(VEC_SIZE), %rsi
-
-
 L(loop_last_4x_vec):
 	addq	%rsi, %rdi
 	subq	%rsi, %rdx
@@ -247,27 +270,32 @@ L(loop_last_4x_vec):
 
 	VMOVA	(VEC_SIZE * 1)(%rsi), %VMM(1)
 	VPTESTN	%VMM(1), %VMM(1), %k0
-	KMOV	%k0, %VMASK_REG
-
+	KMOV	%k0, %VRCX
 
 	cmpq	$(CHAR_PER_VEC * 2 - 1), %rdx
 	ja	L(more_2x_vec)
 
 L(last_2x_vec):
-	FIND_FIRST_ONE (VMASK_REG, VRCX)
+# if CHAR_SIZE == 4
+	cmpl	$CHAR_PER_VEC, %edx
+	jb	L(ret_vec_x1_len)
+
+	test	%ecx, %ecx
+	jne	L(ret_vec_x1)
+# else
+	tzcnt	%VRCX, %VRCX
 	cmpl	%ecx, %edx
 	jb	L(ret_vec_x1_len)
 
-	cmpl	$CHAR_PER_VEC, %ecx
+	cmpl	$VEC_SIZE, %ecx
 	jne	L(ret_vec_x1)
+# endif
 
 	VMOVA	(VEC_SIZE * 2)(%rsi), %VMM(2)
 	VMOVU	%VMM(1), (VEC_SIZE * 1)(%rdi)
 	VPTESTN	%VMM(2), %VMM(2), %k0
 	KMOV	%k0, %VRCX
-# if CHAR_SIZE == 4
-	andl	$(CHAR_PER_VEC - 1), %edx
-# endif
+
 	bts	%VRDX, %VRCX
 L(ret_vec_x2):
 	bsf	%VRCX, %VRCX
@@ -276,17 +304,19 @@ L(ret_vec_x2):
 	ret
 
 L(ret_vec_x1_len):
+# if CHAR_SIZE == 4
+	bts	%VRDX, %VRCX
+# else
 	movl	%edx, %ecx
+# endif
 L(ret_vec_x1):
 	VMOVU	(VEC_SIZE -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
 	VMOVU	%VMM(0), (VEC_SIZE-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
 	ret
 
 L(zero_len):
+# if CHAR_SIZE == 1
 	cmpq	$-1, %rdx
-# if CHAR_SIZE == 4
-	jne	wcscat_evex_dev
-# else
 	jne	strcat_evex_dev
 # endif
 	ret
@@ -299,7 +329,7 @@ L(last_4x_vec):
 # endif
 	VMOVA	(VEC_SIZE * 5)(%rsi), %VMM(1)
 	VPTESTN	%VMM(1), %VMM(1), %k0
-	KMOV	%k0, %VMASK_REG
+	KMOV	%k0, %VRCX
 	subq	$-(VEC_SIZE * 4), %rsi
 	subq	$-(VEC_SIZE * 4), %rdi
 	cmpl	$(CHAR_PER_VEC * 2 - 1), %edx
@@ -307,8 +337,9 @@ L(last_4x_vec):
 	.p2align 4,, 7
 	.p2align 6,, 14
 L(more_2x_vec):
-	bsf	%VMASK_REG, %VRCX
+	bsf	%VRCX, %VRCX
 	jnz	L(ret_vec_x1)
+
 
 	VMOVA	(VEC_SIZE * 2)(%rsi), %VMM(2)
 	VMOVU	%VMM(1), (VEC_SIZE * 1)(%rdi)
@@ -320,27 +351,24 @@ L(more_2x_vec):
 	VMOVA	(VEC_SIZE * 3)(%rsi), %VMM(3)
 	VMOVU	%VMM(2), (VEC_SIZE * 2)(%rdi)
 	VPTESTN	%VMM(3), %VMM(3), %k0
-	KMOV	%k0, %VMASK_REG
+	KMOV	%k0, %VRCX
 
 	cmpq	$(CHAR_PER_VEC * 4 - 1), %rdx
 	ja	L(more_4x_vec)
 
 	addl	$(CHAR_PER_VEC * -2), %edx
 
-	FIND_FIRST_ONE (VMASK_REG, VRCX)
+	tzcnt	%VRCX, %VRCX
 	cmpl	%ecx, %edx
 	jb	L(ret_vec_x3_len)
 
-	cmpl	$CHAR_PER_VEC, %ecx
+	cmpl	$VEC_SIZE, %ecx
 	jne	L(ret_vec_x3)
 
 	VMOVA	(VEC_SIZE * 4)(%rsi), %VMM(4)
 	VMOVU	%VMM(3), (VEC_SIZE * 3)(%rdi)
 	VPTESTN	%VMM(4), %VMM(4), %k0
 	KMOV	%k0, %VRCX
-# if CHAR_SIZE == 4
-	andl	$(CHAR_PER_VEC - 1), %edx
-# endif
 	bts	%VRDX, %VRCX
 	.p2align 4,, 6
 L(ret_vec_x4):
@@ -365,7 +393,7 @@ L(ret_vec_x3):
 	.p2align 4,, 8
 	.p2align 6,, 10
 L(more_4x_vec):
-	bsf	%VMASK_REG, %VRCX
+	bsf	%VRCX, %VRCX
 	jnz	L(ret_vec_x3)
 
 	VMOVA	(VEC_SIZE * 4)(%rsi), %VMM(4)
@@ -379,11 +407,7 @@ L(more_4x_vec):
 	cmpq	$(CHAR_PER_VEC * 8 - 1), %rdx
 	jbe	L(last_4x_vec)
 
-# if CHAR_SIZE != 1
-	leaq	(%rsi, %rdx, CHAR_SIZE), %rdx
-# else
 	addq	%rsi, %rdx
-# endif
 	subq	%rsi, %rdi
 	subq	$-(VEC_SIZE * 5), %rsi
 	andq	$(VEC_SIZE * -4), %rsi
@@ -467,7 +491,7 @@ L(page_cross):
 	KMOV	%k0, %VR9
 	shrl	$2, %ecx
 	andl	$(CHAR_PER_VEC - 1), %ecx
-	shrx	%VRCX, %VR9, %VRCX
+	shrx	%VRSI, %VR9, %VRCX
 # else
 	KMOV	%k0, %VRCX
 	shrx	%VRSI, %VRCX, %VRCX
@@ -504,6 +528,7 @@ L(page_cross_small):
 #  else
 	rep	movsb
 #  endif
+
 	ret
 
 # else
@@ -535,9 +560,7 @@ L(page_cross_small):
 	jz	L(page_cross_copy_8_15)
 #  ifdef CHAR_SIZE == 4
 	movl	(%rsi), %ecx
-	movl	-(4 - CHAR_SIZE)(%rsi, %rdx, CHAR_SIZE), %esi
-	vmovd	%ecx, (%rdi)
-	movl	%esi, -(4 - CHAR_SIZE)(%rdi, %rdx, CHAR_SIZE)
+	movl	%ecx, (%rdi)
 	ret
 #  else
 	testb	$0x7, %cl

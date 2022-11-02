@@ -4,4 +4,4 @@
 #define	USE_AS_STRNCAT 1
 #define	STRCPY wcsncat_evex512_dev
 #define	STRCAT STRCPY
-#include "core/strcat-evex-dev.S"
+#include "core/strncat-evex-dev.S"

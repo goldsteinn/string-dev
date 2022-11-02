@@ -107,6 +107,11 @@ check_wmemcmp(int          res,
 #define FAILURE_MSG                                                            \
     "%u, %u, %u, %u (%u: %lu, %lu)\n", i, j, k, l, al_offset,                  \
         al_pairs[S1_IDX(l)], al_pairs[S2_IDX(l)]
+//#define PRINT(...) fprintf(stderr, __VA_ARGS__)
+#ifndef PRINT
+#define PRINT(...)
+#endif
+
 static int
 test_memcmp_kernel(void const * test_f,
                    FUNC_T(check_memcmp) check_f,
@@ -138,12 +143,13 @@ test_memcmp_kernel(void const * test_f,
             memset_c(s0, 0x12, al_offset + j);
             memset_c(s1, 0x12, al_offset + j);
             for (uint32_t k = INIT_K; k <= j;
-                 k          = ROUNDUP_P2(
-                              k < (512 + 256) ? k + wsize : next_v(k, PAGE_SIZE),
-                     wsize)) {
+                 k          = ROUNDUP_P2((k < (512) || (k + 512 > j))
+                                             ? k + wsize
+                                             : next_v(k, PAGE_SIZE),
+                                wsize)) {
                 for (uint32_t l = INIT_L; l < NPAIRS; ++l) {
                     uint8_t save0[4] = { 0 }, save1[4] = { 0 };
-
+                    PRINT("%u:%u:%u:%u\n", i, j, k, l);
 
                     test_s0 = s0 + ROUNDDOWN_P2(al_pairs[S1_IDX(l)], wsize);
                     test_s1 = s1 + ROUNDDOWN_P2(al_pairs[S2_IDX(l)], wsize);
