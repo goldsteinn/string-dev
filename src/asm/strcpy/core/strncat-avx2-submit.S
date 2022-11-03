@@ -1,5 +1,5 @@
-/* strcpy with AVX2
-   Copyright (C) 2011-2022 Free Software Foundation, Inc.
+/* strncat with AVX2
+   Copyright (C) 2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -15,11 +15,22 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-#include "../../libc-asm-common.h"
-#if IS_IN (libc)
+#define STRNCAT STRCPY
+#include <isa-level.h>
+
+#if ISA_SHOULD_BUILD (3)
+
+# include <sysdep.h>
+
+# ifndef VEC_SIZE
+#  include "x86-avx2-vecs.h"
+# endif
+
+# ifndef STRNCAT
+#  define STRNCAT	__strncat_avx2
+# endif
 
 
-# include "x86-avx-vecs.h"
 	/* Use movsb in page cross case to save code size.  */
 # define USE_MOVSB_IN_PAGE_CROSS	1
 
@@ -33,13 +44,15 @@
 #  define CHAR_SIZE	1
 # endif
 
+# include "strncpy-or-cat-overflow-def.h"
+
 # define PAGE_SIZE	4096
 
 # define VZERO	VMM(7)
 # define VZERO_128	VMM_128(7)
 
 	.section SECTION(.text), "ax", @progbits
-ENTRY(STRCPY)
+ENTRY(STRNCAT)
 	/* Filter zero length strings and very long strings.  Zero
 	   length strings just return, very long strings are handled by
 	   using the non-length variant {wcs|str}cat.  */
@@ -58,7 +71,7 @@ ENTRY(STRCPY)
 	movq	%rdi, %rax
 	vpxor	%VZERO_128, %VZERO_128, %VZERO_128
 
-#include "strcat-strlen-avx2.S"
+# include "strcat-strlen-avx2.S"
 
 	movl	%esi, %ecx
 	andl	$(PAGE_SIZE - 1), %ecx
@@ -180,7 +193,8 @@ L(ret_vec_x2):
 	bsfl	%ecx, %ecx
 	VMOVU	((VEC_SIZE + 0)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %VMM(1)
 	VMOVU	%VMM(1), ((VEC_SIZE + 0)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
-	VZEROUPPER_RETURN
+L(return_vzeroupper):
+	ZERO_UPPER_VEC_REGISTERS_RETURN
 
 
 	.p2align 4,, 12
@@ -352,7 +366,6 @@ L(return_end):
 	VZEROUPPER_RETURN
 
 	.p2align 4,, 4
-	.p2align 6,, 8
 L(page_cross):
 	movq	%rsi, %r8
 	andq	$(VEC_SIZE * -1), %r8
@@ -384,8 +397,8 @@ L(page_cross_small):
 	tzcntl	%ecx, %ecx
 	cmpq	%rdx, %rcx
 	cmova	%edx, %ecx
-#  if USE_AS_WCSCPY
-	addl	$4, %ecx
+#  ifdef USE_AS_WCSCPY
+	addl	$CHAR_SIZE, %ecx
 #  else
 	incl	%ecx
 #  endif
@@ -450,14 +463,10 @@ L(page_cross_copy_16_31):
 
 L(zero_len):
 	incq	%rdx
-# ifdef USE_AS_WCSCPY
-	jnz	wcscat_avx2_dev
-# else
-	jnz	strcat_avx2_dev
-# endif
+	jnz	OVERFLOW_STRCAT
 	movq	%rdi, %rax
 	ret
 
 
-END(STRCPY)
+END(STRNCAT)
 #endif

@@ -15,13 +15,23 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-#include "../../libc-asm-common.h"
-#if IS_IN (libc)
 
-# include "x86-avx-vecs.h"
+#include <isa-level.h>
+
+#if ISA_SHOULD_BUILD (3)
+
+# include <sysdep.h>
+
+# ifndef VEC_SIZE
+#  include "x86-avx2-vecs.h"
+# endif
+
+# ifndef STRCPY
+#  define STRCPY	__strcpy_avx2
+# endif
+
 	/* Use movsb in page cross case to save code size.  */
 # define USE_MOVSB_IN_PAGE_CROSS	1
-
 
 # ifdef USE_AS_WCSCPY
 #  define VPCMPEQ	vpcmpeqd
@@ -145,7 +155,8 @@ L(ret_vec_x1):
 # ifdef USE_AS_STPCPY
 	leaq	1(%rcx, %rdi), %rax
 # endif
-	VZEROUPPER_RETURN
+L(return_vzeroupper):
+	ZERO_UPPER_VEC_REGISTERS_RETURN
 
 	.p2align 4,, 8
 L(ret_vec_x2):

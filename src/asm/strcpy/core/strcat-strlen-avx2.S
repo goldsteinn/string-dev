@@ -1,0 +1,130 @@
+#if 0
+	/* Paired down strlen implementation.  We never commit to 4x
+	   loop as we are expecting a relatively short string and want
+	   to minimize code size.  */
+	movq	%rdi, %r8
+	andq	$(VEC_SIZE * -1), %r8
+	VPCMPEQ	(%r8), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	shrxl	%edi, %ecx, %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+
+	VPCMPEQ	VEC_SIZE(%r8), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	leaq	(VEC_SIZE)(%r8), %rdi
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+	VPCMPEQ	(VEC_SIZE * 2)(%r8), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v1)
+
+	orq	$(VEC_SIZE * 2 - 1), %rdi
+	.p2align 4,, 8
+L(loop_2x_vec):
+	VMOVA	(1)(%rdi), %VMM(0)
+	VPMIN	(VEC_SIZE + 1)(%rdi), %VMM(0), %VMM(1)
+	VPCMPEQ	%VMM(1), %VZERO, %VMM(1)
+	vpmovmskb %VMM(1), %r8d
+	subq	$(VEC_SIZE * -2), %rdi
+	testl	%r8d, %r8d
+	jz	L(loop_2x_vec)
+
+	addq	$(VEC_SIZE * -2 + 1), %rdi
+
+	VPCMPEQ	%VMM(0), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+	movl	%r8d, %ecx
+
+	.p2align 4,, 4
+L(bsf_and_done_v1):
+	addq	$VEC_SIZE, %rdi
+L(bsf_and_done_v0):
+	bsfl	%ecx, %ecx
+	addq	%rcx, %rdi
+#else
+	/* Paired down strlen implementation.  We never commit to 4x
+	   loop as we are expecting a relatively short string and want
+	   to minimize code size.  */
+	movq	%rdi, %r8
+	andq	$(VEC_SIZE * -1), %r8
+	VPCMPEQ	(%r8), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	shrxl	%edi, %ecx, %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+	VPCMPEQ	VEC_SIZE(%r8), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	leaq	(VEC_SIZE)(%r8), %rdi
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+	VPCMPEQ	(VEC_SIZE * 1)(%rdi), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v1)
+
+	VPCMPEQ	(VEC_SIZE * 2)(%rdi), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v2)
+
+	VPCMPEQ	(VEC_SIZE * 3)(%rdi), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v3)
+
+	orq	$(VEC_SIZE * 4 - 1), %rdi
+	.p2align 4,, 8
+L(loop_2x_vec):
+	VMOVA	(VEC_SIZE * 0 + 1)(%rdi), %VMM(0)
+	VPMIN	(VEC_SIZE * 1 + 1)(%rdi), %VMM(0), %VMM(1)
+	VMOVA	(VEC_SIZE * 2 + 1)(%rdi), %VMM(2)
+	VPMIN	(VEC_SIZE * 3 + 1)(%rdi), %VMM(2), %VMM(3)
+	VPMIN	%VMM(1), %VMM(3), %VMM(3)
+	VPCMPEQ	%VMM(3), %VZERO, %VMM(3)
+	vpmovmskb %VMM(3), %r8d
+	subq	$(VEC_SIZE * -4), %rdi
+	testl	%r8d, %r8d
+	jz	L(loop_2x_vec)
+
+	addq	$(VEC_SIZE * -4 + 1), %rdi
+
+	VPCMPEQ	%VMM(0), %VZERO, %VMM(0)
+	vpmovmskb %VMM(0), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v0)
+
+	VPCMPEQ	%VMM(1), %VZERO, %VMM(1)
+	vpmovmskb %VMM(1), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v1)
+
+	VPCMPEQ	%VMM(2), %VZERO, %VMM(2)
+	vpmovmskb %VMM(2), %ecx
+	testl	%ecx, %ecx
+	jnz	L(bsf_and_done_v2)
+
+	movl	%r8d, %ecx
+L(bsf_and_done_v3):
+	addq	$VEC_SIZE, %rdi
+L(bsf_and_done_v2):
+	bsfl	%ecx, %ecx
+	leaq	(VEC_SIZE * 2)(%rdi, %rcx), %rdi
+	jmp	L(strcat_strlen_done)
+
+	.p2align 4,, 4
+L(bsf_and_done_v1):
+	addq	$VEC_SIZE, %rdi
+L(bsf_and_done_v0):
+	bsfl	%ecx, %ecx
+	addq	%rcx, %rdi
+L(strcat_strlen_done):
+#endif

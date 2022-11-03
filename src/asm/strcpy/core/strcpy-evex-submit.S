@@ -22,9 +22,9 @@
 
 	/* Use evex-masked stores for small sizes. Turned off at the
 	   moment.  */
-# define USE_EVEX_MASKED_STORE	1
+# define USE_EVEX_MASKED_STORE	0
 	/* Use movsb in page cross case to save code size.  */
-# define USE_MOVSB_IN_PAGE_CROSS	0
+# define USE_MOVSB_IN_PAGE_CROSS	1
 
 # include <sysdep.h>
 
@@ -323,8 +323,7 @@ L(more_1x_vec):
 	andq	$-(VEC_SIZE * 4), %rsi
 
 
-	/* Do first half of loop ahead of time so loop can just start by
-	   storing.  */
+	/* Load first half of the loop before entry.  */
 	VMOVA	(VEC_SIZE * 0 + 0)(%rsi), %VMM(0)
 	VMOVA	(VEC_SIZE * 1 + 0)(%rsi), %VMM(1)
 	VMOVA	(VEC_SIZE * 2 + 0)(%rsi), %VMM(2)

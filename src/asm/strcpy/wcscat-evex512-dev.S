@@ -3,4 +3,4 @@
 #define	USE_AS_STRCAT 1
 #define	STRCPY wcscat_evex512_dev
 #define	STRCAT STRCPY
-#include "core/strcpy-evex-dev.S"
+#include "core/strcpy-evex-submit.S"

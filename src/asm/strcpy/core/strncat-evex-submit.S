@@ -15,16 +15,14 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
-#define STRNCAT	STRCPY
-
+#define STRNCAT STRCPY
 #include <isa-level.h>
 
 #if ISA_SHOULD_BUILD (4)
 
 	/* Use evex-masked stores for small sizes. Turned off at the
 	   moment.  */
-# define USE_EVEX_MASKED_STORE	1
+# define USE_EVEX_MASKED_STORE	0
 
 # include <sysdep.h>
 
@@ -50,8 +48,6 @@
 #  define VMASK_REG	VR10
 #  define FIND_FIRST_ONE(src, dst)	movl $CHAR_PER_VEC, %dst; bsf %src, %dst
 
-#  define STRCAT_PREFIX	wcs
-
 #  define USE_WIDE_CHAR
 # else
 #  define VMOVU_MASK	vmovdqu8
@@ -66,23 +62,9 @@
 #  define VMASK_REG	VRCX
 #  define FIND_FIRST_ONE(src, dst)	tzcnt %src, %dst
 
-#  define STRCAT_PREFIX	str
 # endif
 
-# ifndef STRCAT_EXT
-#  if VEC_SIZE == 64
-#   define STRCAT_EXT	_evex512
-#  else
-#   define STRCAT_EXT	_evex
-#  endif
-# endif
-
-# define PRIMITIVE_NAME_STRCAT(prefix, ext)	__ ## prefix ## cat ## ext
-# define NAME_STRCAT(prefix, ext)	PRIMITIVE_NAME_STRCAT(prefix, ext)
-
-# ifndef OVERFLOW_STRCAT
-#  define OVERFLOW_STRCAT	NAME_STRCAT(STRCAT_PREFIX, STRCAT_EXT)
-# endif
+# include "strncpy-or-cat-overflow-def.h"
 
 # include "reg-macros.h"
 
@@ -95,9 +77,6 @@
 
 	.section SECTION(.text), "ax", @progbits
 ENTRY(STRNCAT)
-	/* Filter zero length strings and very long strings.  Zero
-	   length strings just return, very long strings are handled by
-	   using the non-length variant {wcs|str}cat.  */
 	movq	%rdi, %rax
 # ifdef USE_AS_WCSCPY
 	decq	%rdx

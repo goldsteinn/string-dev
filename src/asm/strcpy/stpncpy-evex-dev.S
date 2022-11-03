@@ -3,4 +3,4 @@
 #define USE_AS_STRNCPY	1
 #define STRCPY	stpncpy_evex_dev
 #define STRCAT	STRCPY
-#include "core/strncpy-evex-dev.S"
+#include "core/strncpy-evex-submit.S"

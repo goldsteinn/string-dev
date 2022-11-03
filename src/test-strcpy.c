@@ -41,7 +41,7 @@
 
 #define strcat_expec_ret(s1_, s1_start_, sz_)                                  \
     ((s1_start_) +                                                             \
-     (((((s1_) - (s1_start_)) * 15) / 16) & (-CAST(uint64_t, sz_))))
+     (((((s1_) - (s1_start_)) * 3) / 16) & (-CAST(uint64_t, sz_))))
 
 static int32_t
 check_strcat(const uint8_t * s1_start,
@@ -508,6 +508,11 @@ check_strncat(const uint8_t * s1_start,
                     s2[len] == '\0');
             return 4;
         }
+        if (s1[n] != '\0') {
+            fprintf(stderr, "Missing appended null-term: %lu (%x)\n", len,
+                    s1[n]);
+            return 4;
+        }
     }
 
     if (check_region(s1, s2, end)) {
@@ -522,6 +527,130 @@ check_strncat(const uint8_t * s1_start,
 
     return 0;
 }
+
+
+static int
+do_strncat_random_tests(uint64_t test_size, void const * test_f) {
+
+    func_switch_t func = { test_f };
+    size_t        i, j, n, align1, align2, len1, len2, N;
+
+
+    char * buf1 = (char *)make_buf(test_size);
+    char * buf2 = (char *)make_buf(test_size);
+
+    char * p1 = (char *)(buf1 + test_size) - 512;
+    char * p2 = (char *)(buf2 + test_size) - 512;
+    char * p3 = (char *)buf1;
+    char * res;
+    enum { ITERATIONS = 100000 };
+
+    for (n = 0; n < ITERATIONS; n++) {
+        N      = rand() & 255;
+        align1 = rand() & 31;
+        if (rand() & 1)
+            align2 = rand() & 31;
+        else
+            align2 = align1 + (rand() & 24);
+        len1 = rand() & 511;
+        if (len1 + align2 > 512)
+            len2 = rand() & 7;
+        else
+            len2 = (512 - len1 - align2) * (rand() & (1024 * 1024 - 1)) /
+                   (1024 * 1024);
+        j = align1;
+        if (align2 + len2 > j) j = align2 + len2;
+        if (len1 + j >= 511) len1 = 510 - j - (rand() & 7);
+        if (len1 >= 512) len1 = 0;
+        if (align1 + len1 < 512 - 8) {
+            j = 510 - align1 - len1 - (rand() & 31);
+            if (j > 0 && j < 512) align1 += j;
+        }
+        j = len1 + align1 + 64;
+        if (j > 512) j = 512;
+        for (i = 0; i < j; i++) {
+            if (i == len1 + align1)
+                p1[i] = 0;
+            else {
+                p1[i] = rand() & 254;
+                if (i >= align1 && i < len1 + align1 && !p1[i])
+                    p1[i] = (rand() & 123) + 3;
+            }
+        }
+        for (i = 0; i < len2; i++) {
+            p3[i] = rand() & 254;
+            if (!p3[i]) p3[i] = (rand() & 123) + 3;
+        }
+        p3[len2] = 0;
+
+        {
+            memset_c(p2 - 64, '\1', align2 + 64);
+            memset_c(p2 + align2 + len2 + 1, '\1', 512 - align2 - len2 - 1);
+            memcpy_c(p2 + align2, p3, len2 + 1);
+            res = (char *)func.run_strncat((char *)(p2 + align2),
+                                           (char *)(p1 + align1), N);
+
+            if (res != p2 + align2) {
+                fprintf(stderr,
+                        "Iteration %zd - wrong result in function %s "
+                        "(%zd, %zd, %zd, %zd, %zd) %p != %p",
+                        n, "strncat", align1, align2, len1, len2, N, res,
+                        p2 + align2);
+                return 1;
+            }
+            for (j = 0; j < align2 + 64; ++j) {
+                if (p2[j - 64] != '\1') {
+                    fprintf(stderr,
+                            "Iteration %zd - garbage before dst, %s "
+                            "%zd, %zd, %zd, %zd, %zd)",
+                            n, "strncat", align1, align2, len1, len2, N);
+                    return 1;
+                }
+            }
+            if (memcmp_c(p2 + align2, p3, len2)) {
+                fprintf(stderr,
+                        "Iteration %zd - garbage in string before, %s "
+                        "(%zd, %zd, %zd, %zd, %zd)",
+                        n, "strncat", align1, align2, len1, len2, N);
+                return 1;
+            }
+
+            if ((len1 + 1) > N)
+                j = align2 + N + 1 + len2;
+            else
+                j = align2 + len1 + 1 + len2;
+            for (; j < 512; ++j) {
+                if (p2[j] != '\1') {
+                    fprintf(stderr,
+                            "Iteration %zd - garbage after, %s "
+                            "(%zd, %zd, %zd, %zd, %zd)",
+                            n, "strncat", align1, align2, len1, len2, N);
+                    return 1;
+                }
+            }
+            if (len1 + 1 > N) {
+                if (p2[align2 + N + len2] != '\0') {
+                    fprintf(
+                        stderr,
+                        "Iteration %zd - there is no zero at the "
+                        "end of output string, %s (%zd, %zd, %zd, %zd, %zd)",
+                        n, "strncat", align1, align2, len1, len2, N);
+                    return 1;
+                }
+            }
+            if (memcmp_c(p1 + align1, p2 + align2 + len2,
+                         (len1 + 1) > N ? N : len1 + 1)) {
+                fprintf(stderr,
+                        "Iteration %zd - different strings, %s "
+                        "(%zd, %zd, %zd, %zd, %zd)",
+                        n, "strncat", align1, align2, len1, len2, N);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 
 static int32_t
 check_wcsncat(const uint8_t * s1_start,
@@ -700,7 +829,8 @@ typedef FUNC_T(check_strcpy) check_func_t;
 #define VPRINT(...)
 #endif
 static int32_t
-test_strcpy_kernel(uint64_t     test_size,
+test_strcpy_kernel(char const * name,
+                   uint64_t     test_size,
                    void const * test_f,
                    check_func_t check_f,
                    init_func_t  init_f,
@@ -725,7 +855,7 @@ test_strcpy_kernel(uint64_t     test_size,
     uint64_t al_pairs[NPAIRS * 2] = { 0 };
     for (i = INIT_I; i < nalignments * 2; ++i) {
         uint64_t al_offset = ROUNDUP_P2(alignments[i % nalignments], wsize);
-        fprintf(stderr, "%lu\n", i);
+        fprintf(stderr, "%-20s: %-4lu\n", name, i);
         al_offset = (i >= nalignments ? PAGE_SIZE - al_offset : al_offset);
         if (al_offset > test_size) {
             continue;
@@ -783,11 +913,13 @@ next_length(uint64_t l, uint64_t test_size, uint64_t wsize_shift) {
     return l += (((rand() % base) | 1) << wsize_shift);
 }
 static int32_t
-test_strncpy_kernel(uint64_t     test_size,
+test_strncpy_kernel(char const * name,
+                    uint64_t     test_size,
                     void const * test_f,
                     check_func_t check_f,
                     init_func_t  init_f,
                     uint64_t     wsize) {
+
     func_switch_t func = { test_f };
 
     uint8_t * s1       = make_buf(test_size);
@@ -807,7 +939,7 @@ test_strncpy_kernel(uint64_t     test_size,
     uint64_t al_pairs[NPAIRS * 2] = { 0 };
     for (i = INIT_I; i < nalignments * 2; ++i) {
         uint64_t al_offset = ROUNDUP_P2(alignments[i % nalignments], wsize);
-        fprintf(stderr, "%lu\n", i);
+        fprintf(stderr, "%-20s: %-4lu\n", name, i);
         al_offset = (i >= nalignments ? PAGE_SIZE - al_offset : al_offset);
         if (al_offset > test_size) {
             continue;
@@ -883,52 +1015,58 @@ test_strncpy_kernel(uint64_t     test_size,
 
 int32_t
 test_strcpy(void const * test_f) {
-    test_assert(
-        test_strcpy_kernel(4096, test_f, &check_strcpy, &init_strcpy, 1) == 0);
-    test_assert(
-        test_strcpy_kernel(8192, test_f, &check_strcpy, &init_strcpy, 1) == 0);
+    test_assert(test_strcpy_kernel("test_strcpy", 4096, test_f, &check_strcpy,
+                                   &init_strcpy, 1) == 0);
+    test_assert(test_strcpy_kernel("test_strcpy", 8192, test_f, &check_strcpy,
+                                   &init_strcpy, 1) == 0);
     return 0;
 }
 int32_t
 test_strcat(void const * test_f) {
-    test_assert(
-        test_strcpy_kernel(4096, test_f, &check_strcat, &init_strcat, 1) == 0);
-    test_assert(
-        test_strcpy_kernel(8192, test_f, &check_strcat, &init_strcat, 1) == 0);
+    test_assert(test_strcpy_kernel("test_strcat", 4096, test_f, &check_strcat,
+                                   &init_strcat, 1) == 0);
+    test_assert(test_strcpy_kernel("test_strcat", 8192, test_f, &check_strcat,
+                                   &init_strcat, 1) == 0);
     return 0;
 }
 int32_t
 test_stpcpy(void const * test_f) {
 
-    test_assert(
-        test_strcpy_kernel(4096, test_f, &check_stpcpy, &init_stpcpy, 1) == 0);
-    test_assert(
-        test_strcpy_kernel(8192, test_f, &check_stpcpy, &init_stpcpy, 1) == 0);
+    test_assert(test_strcpy_kernel("test_stpcpy", 4096, test_f, &check_stpcpy,
+                                   &init_stpcpy, 1) == 0);
+    test_assert(test_strcpy_kernel("test_stpcpy", 8192, test_f, &check_stpcpy,
+                                   &init_stpcpy, 1) == 0);
     return 0;
 }
 
 int32_t
 test_strncpy(void const * test_f) {
-    test_assert(test_strncpy_kernel(4096, test_f, &check_strncpy, &init_strncpy,
-                                    1) == 0);
-    test_assert(test_strncpy_kernel(8192, test_f, &check_strncpy, &init_strncpy,
-                                    1) == 0);
+    test_assert(test_strncpy_kernel("test_strncpy", 8192, test_f,
+                                    &check_strncpy, &init_strncpy, 1) == 0);
+
+    test_assert(test_strncpy_kernel("test_strncpy", 4096, test_f,
+                                    &check_strncpy, &init_strncpy, 1) == 0);
+
+
     return 0;
 }
 int32_t
 test_strncat(void const * test_f) {
-    test_assert(test_strncpy_kernel(4096, test_f, &check_strncat, &init_strncat,
-                                    1) == 0);
-    test_assert(test_strncpy_kernel(8192, test_f, &check_strncat, &init_strncat,
-                                    1) == 0);
+//    test_assert(do_strncat_random_tests(4096, test_f) == 0);
+//    test_assert(do_strncat_random_tests(8192, test_f) == 0);
+    test_assert(test_strncpy_kernel("test_strncat", 4096, test_f,
+                                    &check_strncat, &init_strncat, 1) == 0);
+    test_assert(test_strncpy_kernel("test_strncat", 8192, test_f,
+                                    &check_strncat, &init_strncat, 1) == 0);
     return 0;
 }
 int32_t
 test_stpncpy(void const * test_f) {
-    test_assert(test_strncpy_kernel(4096, test_f, &check_stpncpy, &init_strncpy,
-                                    1) == 0);
-    test_assert(test_strncpy_kernel(8192, test_f, &check_stpncpy, &init_strncpy,
-                                    1) == 0);
+    test_assert(test_strncpy_kernel("test_stpncpy", 8192, test_f,
+                                    &check_stpncpy, &init_strncpy, 1) == 0);
+
+    test_assert(test_strncpy_kernel("test_stpncpy", 4096, test_f,
+                                    &check_stpncpy, &init_strncpy, 1) == 0);
     return 0;
 }
 int32_t
@@ -945,51 +1083,51 @@ test_strlcat(void const * test_f) {
 
 int32_t
 test_wcscpy(void const * test_f) {
-    test_assert(
-        test_strcpy_kernel(4096, test_f, &check_wcscpy, &init_wcscpy, 4) == 0);
-    test_assert(
-        test_strcpy_kernel(8192, test_f, &check_wcscpy, &init_wcscpy, 4) == 0);
+    test_assert(test_strcpy_kernel("test_wcscpy", 4096, test_f, &check_wcscpy,
+                                   &init_wcscpy, 4) == 0);
+    test_assert(test_strcpy_kernel("test_wcscpy", 8192, test_f, &check_wcscpy,
+                                   &init_wcscpy, 4) == 0);
     return 0;
 }
 int32_t
 test_wcscat(void const * test_f) {
-    test_assert(
-        test_strcpy_kernel(4096, test_f, &check_wcscat, &init_wcscat, 4) == 0);
-    test_assert(
-        test_strcpy_kernel(8192, test_f, &check_wcscat, &init_wcscat, 4) == 0);
+    test_assert(test_strcpy_kernel("test_wcscat", 4096, test_f, &check_wcscat,
+                                   &init_wcscat, 4) == 0);
+    test_assert(test_strcpy_kernel("test_wcscat", 8192, test_f, &check_wcscat,
+                                   &init_wcscat, 4) == 0);
     return 0;
 }
 int32_t
 test_wcpcpy(void const * test_f) {
-    test_assert(
-        test_strcpy_kernel(4096, test_f, &check_wcpcpy, &init_wcpcpy, 4) == 0);
-    test_assert(
-        test_strcpy_kernel(8192, test_f, &check_wcpcpy, &init_wcpcpy, 4) == 0);
+    test_assert(test_strcpy_kernel("test_wcpcpy", 4096, test_f, &check_wcpcpy,
+                                   &init_wcpcpy, 4) == 0);
+    test_assert(test_strcpy_kernel("test_wcpcpy", 8192, test_f, &check_wcpcpy,
+                                   &init_wcpcpy, 4) == 0);
     return 0;
 }
 
 int32_t
 test_wcsncpy(void const * test_f) {
-    test_assert(test_strncpy_kernel(4096, test_f, &check_strncpy, &init_strncpy,
-                                    4) == 0);
-    test_assert(test_strncpy_kernel(8192, test_f, &check_strncpy, &init_strncpy,
-                                    4) == 0);
+    test_assert(test_strncpy_kernel("test_wcsncpy", 4096, test_f,
+                                    &check_strncpy, &init_strncpy, 4) == 0);
+    test_assert(test_strncpy_kernel("test_wcsncpy", 8192, test_f,
+                                    &check_strncpy, &init_strncpy, 4) == 0);
     return 0;
 }
 int32_t
 test_wcsncat(void const * test_f) {
-    test_assert(test_strncpy_kernel(4096, test_f, &check_wcsncat, &init_wcsncat,
-                                    4) == 0);
-    test_assert(test_strncpy_kernel(8192, test_f, &check_wcsncat, &init_wcsncat,
-                                    4) == 0);
+    test_assert(test_strncpy_kernel("test_wcsncat", 4096, test_f,
+                                    &check_wcsncat, &init_wcsncat, 4) == 0);
+    test_assert(test_strncpy_kernel("test_wcsncat", 8192, test_f,
+                                    &check_wcsncat, &init_wcsncat, 4) == 0);
     return 0;
 }
 int32_t
 test_wcpncpy(void const * test_f) {
-    test_assert(test_strncpy_kernel(4096, test_f, &check_stpncpy, &init_strncpy,
-                                    4) == 0);
-    test_assert(test_strncpy_kernel(8192, test_f, &check_stpncpy, &init_strncpy,
-                                    4) == 0);
+    test_assert(test_strncpy_kernel("test_wcpncpy", 4096, test_f,
+                                    &check_stpncpy, &init_strncpy, 4) == 0);
+    test_assert(test_strncpy_kernel("test_wcpncpy", 8192, test_f,
+                                    &check_stpncpy, &init_strncpy, 4) == 0);
     return 0;
 }
 int32_t

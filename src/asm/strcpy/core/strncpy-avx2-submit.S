@@ -1,5 +1,5 @@
-/* strcpy with AVX2
-   Copyright (C) 2011-2022 Free Software Foundation, Inc.
+/* strncpy with AVX2
+   Copyright (C) 2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -15,10 +15,22 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-#include "../../libc-asm-common.h"
-#if IS_IN (libc)
+#define STRNCPY STRCPY
+#include <isa-level.h>
 
-# include "x86-avx-vecs.h"
+#if ISA_SHOULD_BUILD (3)
+
+# include <sysdep.h>
+
+
+# ifndef VEC_SIZE
+#  include "x86-avx2-vecs.h"
+# endif
+
+# ifndef STRNCPY
+#  define STRNCPY	__strncpy_avx2
+# endif
+
 
 # ifdef USE_AS_WCSCPY
 #  define VPCMPEQ	vpcmpeqd
@@ -30,6 +42,8 @@
 #  define CHAR_SIZE	1
 # endif
 
+# include "strncpy-or-cat-overflow-def.h"
+
 # define PAGE_SIZE	4096
 
 # define VZERO	VMM(7)
@@ -37,7 +51,7 @@
 
 
 	.section SECTION(.text), "ax", @progbits
-ENTRY(STRCPY)
+ENTRY(STRNCPY)
 	/* Filter zero length strings and very long strings.  Zero
 	   length strings just return, very long strings are handled by
 	   just running rep stos{b|l} to zero set (which will almost
@@ -141,7 +155,8 @@ L(ret_vec_x1_len_no_zfill):
 	adcq	%rdi, %rax
 #  endif
 # endif
-	VZEROUPPER_RETURN
+L(return_vzeroupper):
+	ZERO_UPPER_VEC_REGISTERS_RETURN
 
 	.p2align 4,, 6
 L(ret_vec_x1):
@@ -689,8 +704,8 @@ L(page_cross_copy_only):
 # ifdef USE_AS_STPCPY
 #  ifdef USE_AS_WCSCPY
 	setc	%al
-	addq	%rdx, %rdi
-	leaq	(%rdi, %rax, CHAR_SIZE), %rax
+	addq	%rdi, %rdx
+	leaq	(%rdx, %rax, CHAR_SIZE), %rax
 #  else
 	movl	%edx, %eax
 	adcq	%rdi, %rax
@@ -715,9 +730,6 @@ L(best_effort_strncpy):
 	rep	stosb
 # endif
 	movq	%r8, %rdi
-	// jmp     OVERFLOW_STRCPY
-
-
-
-END(STRCPY)
+//	jmp	OVERFLOW_STRCPY
+END(STRNCPY)
 #endif

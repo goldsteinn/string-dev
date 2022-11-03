@@ -15,16 +15,14 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
-#define STRNCPY	STRCPY
-
+#define STRNCPY STRCPY
 #include <isa-level.h>
 
 #if ISA_SHOULD_BUILD (4)
 
 	/* Use evex-masked stores for small sizes. Turned off at the
 	   moment.  */
-# define USE_EVEX_MASKED_STORE	1
+# define USE_EVEX_MASKED_STORE	0
 
 
 # include <sysdep.h>
@@ -32,8 +30,9 @@
 #  include "x86-evex256-vecs.h"
 # endif
 
+
 # ifndef STRNCPY
-#  define STRNCPY	__strcpy_evex
+#  define STRNCPY	__strncpy_evex
 # endif
 
 # ifdef USE_AS_WCSCPY
@@ -47,13 +46,6 @@
 #  define REP_MOVS	rep movsd
 #  define REP_STOS	rep stosl
 
-#  define STRCPY_PREFIX	wc
-#  ifdef USE_AS_STPCPY
-#   define STRCPY_PSR	p
-#  else
-#   define STRCPY_PSR	s
-#  endif
-
 #  define USE_WIDE_CHAR
 
 # else
@@ -66,29 +58,9 @@
 
 #  define REP_MOVS	rep movsb
 #  define REP_STOS	rep stosb
-
-#  define STRCPY_PREFIX	st
-#  ifdef USE_AS_STPCPY
-#   define STRCPY_PSR	p
-#  else
-#   define STRCPY_PSR	r
-#  endif
 # endif
 
-# ifndef STRCPY_EXT
-#  if VEC_SIZE == 64
-#   define STRCPY_EXT	_evex512
-#  else
-#   define STRCPY_EXT	_evex
-#  endif
-# endif
-
-# define PRIMITIVE_NAME_STRCPY(prefix, psr, ext)	__ ## prefix ## psr ## cpy ## ext
-# define NAME_STRCPY(prefix, psr, ext)	PRIMITIVE_NAME_STRCPY(prefix, psr, ext)
-
-# ifndef OVERFLOW_STRCPY
-#  define OVERFLOW_STRCPY	NAME_STRCPY(STRCPY_PREFIX, STRCPY_PSR, STRCPY_EXT)
-# endif
+# include "strncpy-or-cat-overflow-def.h"
 
 # define PAGE_SIZE	4096
 # define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
@@ -947,12 +919,14 @@ L(page_cross):
 
 
 	/* If rcx is non-zero then continue.  */
-	shl	%VRCX
+	test	%VRCX, %VRCX
 	jz	L(page_cross_continue)
 
 	/* We found zero-CHAR so need to copy then zfill (we know we
 	   didn't cover all of length here).  */
 	bsf	%VRCX, %VRCX
+L(movsb_and_zfill):
+	incl	%ecx
 	subq	%rcx, %rdx
 # ifdef USE_AS_STPCPY
 	leaq	-CHAR_SIZE(%rdi, %rcx, CHAR_SIZE), %rax
@@ -1011,6 +985,6 @@ L(best_effort_strncpy):
 	 */
 	REP_STOS
 	movq	%r8, %rdi
-	// jmp     OVERFLOW_STRCPY
+//	jmp	OVERFLOW_STRCPY
 END(STRNCPY)
 #endif
