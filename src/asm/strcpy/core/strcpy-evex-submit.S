@@ -88,7 +88,7 @@
 ENTRY(STRCPY)
 # ifdef USE_AS_STRCAT
 	movq	%rdi, %rax
-#  include "strcat-strlen-evex.S"
+#  include "strcat-strlen-evex.h.S"
 # endif
 
 	movl	%esi, %PAGE_ALIGN_REG
@@ -237,37 +237,6 @@ L(copy_4_7):
 
 
 	.p2align 4,, 8
-L(ret_vec_x1):
-	bsf	%VRCX, %VRCX
-	VMOVU	(VEC_SIZE -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
-	VMOVU	%VMM(0), (VEC_SIZE -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
-# ifdef USE_AS_STPCPY
-	leaq	VEC_SIZE(%rdi, %rcx, CHAR_SIZE), %rax
-# endif
-	ret
-
-	.p2align 4,, 4
-L(ret_vec_x2):
-	bsf	%VRCX, %VRCX
-	VMOVU	((VEC_SIZE * 2)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
-	VMOVU	%VMM(0), ((VEC_SIZE * 2)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
-# ifdef USE_AS_STPCPY
-	leaq	(VEC_SIZE * 2)(%rdi, %rcx, CHAR_SIZE), %rax
-# endif
-	ret
-
-	/* ret_vec_x3 reuses return code after the loop.  */
-	.p2align 4,, 6
-L(ret_vec_x4):
-	bsf	%VRCX, %VRCX
-	VMOVU	((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
-	VMOVU	%VMM(0), ((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
-# ifdef USE_AS_STPCPY
-	leaq	(VEC_SIZE * 4)(%rdi, %rcx, CHAR_SIZE), %rax
-# endif
-	ret
-
-	.p2align 4,, 8
 L(more_1x_vec):
 # if defined USE_AS_STPCPY || defined USE_AS_STRCAT
 	VMOVU	%VMM(0), (%rdi)
@@ -401,6 +370,38 @@ L(ret_vec_x0_end):
 	VMOVU	(-(VEC_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
 	VMOVU	%VMM(0), (-(VEC_SIZE))(%rdi, %rcx, CHAR_SIZE)
 	ret
+
+	.p2align 4,, 8
+L(ret_vec_x1):
+	bsf	%VRCX, %VRCX
+	VMOVU	(VEC_SIZE -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
+	VMOVU	%VMM(0), (VEC_SIZE -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
+# ifdef USE_AS_STPCPY
+	leaq	VEC_SIZE(%rdi, %rcx, CHAR_SIZE), %rax
+# endif
+	ret
+
+	.p2align 4,, 4
+L(ret_vec_x2):
+	bsf	%VRCX, %VRCX
+	VMOVU	((VEC_SIZE * 2)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
+	VMOVU	%VMM(0), ((VEC_SIZE * 2)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
+# ifdef USE_AS_STPCPY
+	leaq	(VEC_SIZE * 2)(%rdi, %rcx, CHAR_SIZE), %rax
+# endif
+	ret
+
+	/* ret_vec_x3 reuses return code after the loop.  */
+	.p2align 4,, 6
+L(ret_vec_x4):
+	bsf	%VRCX, %VRCX
+	VMOVU	((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx, CHAR_SIZE), %VMM(0)
+	VMOVU	%VMM(0), ((VEC_SIZE * 4)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx, CHAR_SIZE)
+# ifdef USE_AS_STPCPY
+	leaq	(VEC_SIZE * 4)(%rdi, %rcx, CHAR_SIZE), %rax
+# endif
+	ret
+
 
 	.p2align 4,, 4
 L(page_cross):

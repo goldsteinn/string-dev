@@ -1,99 +1,17 @@
-/* Paired down strlen implementation for str{n}cat-evex{256|512}.
-   Copyright (C) 2022 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-   The GNU C Library is free software; you can redistribute it and/or
-   modify it under the terms of the GNU Lesser General Public
-   License as published by the Free Software Foundation; either
-   version 2.1 of the License, or (at your option) any later version.
-
-   The GNU C Library is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   Lesser General Public License for more details.
-
-   You should have received a copy of the GNU Lesser General Public
-   License along with the GNU C Library; if not, see
-   <https://www.gnu.org/licenses/>.  */
-#if 0
+    /* Simple strlen implementation that ends at L(strcat_strlen_done).  */
 	vpxorq	%VZERO_128, %VZERO_128, %VZERO_128
-	/* Paired down strlen implementation.  We never commit to 4x
-	   loop as we are expecting a relatively short string and want
-	   to minimize code size.  */
 	movq	%rdi, %r8
 	andq	$(VEC_SIZE * -1), %r8
 	VPCMPEQ	(%r8), %VZERO, %k0
 	KMOV	%k0, %VRCX
-# ifdef USE_AS_WCSCPY
+#ifdef USE_AS_WCSCPY
 	subl	%r8d, %edi
 	shrl	$2, %edi
-# endif
+#endif
 	shrx	%VRDI, %VRCX, %VRCX
-# ifdef USE_AS_WCSCPY
+#ifdef USE_AS_WCSCPY
 	movq	%rax, %rdi
-# endif
-	test	%VRCX, %VRCX
-	jnz	L(bsf_and_done_v0)
-
-
-	VPCMPEQ	VEC_SIZE(%r8), %VZERO, %k0
-	KMOV	%k0, %VRCX
-	leaq	(VEC_SIZE)(%r8), %rdi
-	test	%VRCX, %VRCX
-	jnz	L(bsf_and_done_v0)
-
-	VPCMPEQ	(VEC_SIZE * 2)(%r8), %VZERO, %k0
-	KMOV	%k0, %VRCX
-	test	%VRCX, %VRCX
-	jnz	L(bsf_and_done_v1)
-
-	andq	$-(VEC_SIZE * 2), %rdi
-	.p2align 4,, 8
-L(loop_2x_vec):
-	VMOVA	(VEC_SIZE * 2)(%rdi), %VMM(0)
-	VPMIN	(VEC_SIZE * 3)(%rdi), %VMM(0), %VMM(1)
-	VPTESTN	%VMM(1), %VMM(1), %k0
-	KMOV	%k0, %VR8
-	subq	$(VEC_SIZE * -2), %rdi
-	test	%VR8, %VR8
-	jz	L(loop_2x_vec)
-
-
-	VPTESTN	%VMM(0), %VMM(0), %k0
-	KMOV	%k0, %VRCX
-	test	%VRCX, %VRCX
-	jnz	L(bsf_and_done_v0)
-
-	mov	%VR8, %VRCX
-
-	.p2align 4,, 4
-L(bsf_and_done_v1):
-	addq	$VEC_SIZE, %rdi
-L(bsf_and_done_v0):
-	bsf	%VRCX, %VRCX
-# ifdef USE_AS_WCSCPY
-	leaq	(%rdi, %rcx, CHAR_SIZE), %rdi
-# else
-	addq	%rcx, %rdi
-# endif
-#else
-
-	vpxorq	%VZERO_128, %VZERO_128, %VZERO_128
-	/* Paired down strlen implementation.  We never commit to 4x
-	   loop as we are expecting a relatively short string and want
-	   to minimize code size.  */
-	movq	%rdi, %r8
-	andq	$(VEC_SIZE * -1), %r8
-	VPCMPEQ	(%r8), %VZERO, %k0
-	KMOV	%k0, %VRCX
-# ifdef USE_AS_WCSCPY
-	subl	%r8d, %edi
-	shrl	$2, %edi
-# endif
-	shrx	%VRDI, %VRCX, %VRCX
-# ifdef USE_AS_WCSCPY
-	movq	%rax, %rdi
-# endif
+#endif
 	test	%VRCX, %VRCX
 	jnz	L(bsf_and_done_v0)
 
@@ -159,11 +77,9 @@ L(bsf_and_done_v1):
 	addq	$VEC_SIZE, %rdi
 L(bsf_and_done_v0):
 	bsf	%VRCX, %VRCX
-# ifdef USE_AS_WCSCPY
+#ifdef USE_AS_WCSCPY
 	leaq	(%rdi, %rcx, CHAR_SIZE), %rdi
-# else
+#else
 	addq	%rcx, %rdi
-# endif
-L(strcat_strlen_done):
-
 #endif
+L(strcat_strlen_done):

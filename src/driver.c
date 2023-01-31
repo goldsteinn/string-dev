@@ -166,7 +166,7 @@ thr_run_test(void * arg) {
 
 
 static void *
-run_bench(void * arg) {
+run_bench(void const * arg) {
     func_decl_t const * decl  = (func_decl_t const *)arg;
     func_info_t const * finfo = CAST(func_info_t const *, decl->data);
     ll_time_t           time  = 0;
@@ -181,6 +181,13 @@ run_bench(void * arg) {
     return NULL;
 }
 
+static void *
+thr_run_bench(void * arg) {
+    pthread_detach(pthread_self());
+    run_bench((func_decl_t const *)arg);
+    sem_post(&sem);
+    return NULL;
+}
 
 int
 main(int argc, char * argv[]) {
@@ -213,7 +220,7 @@ main(int argc, char * argv[]) {
         err_assert(sem_init(&sem, 0, parallel) == 0);
 
         run_decls(&string_decls, run_all ? NULL : todo.ptrs, todo.n, &sem,
-                  do_test ? &thr_run_test : &run_bench);
+                  do_test ? &thr_run_test : &thr_run_bench);
     }
 
 

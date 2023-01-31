@@ -502,11 +502,12 @@ check_strncat(const uint8_t * s1_start,
             return 4;
         }
     }
-    else if (n) {
-        if (s1[n - 1] == '\0') {
-            fprintf(stderr, "Has Term: %lu (%u, %u)\n", len, s1[len] == '\0',
-                    s2[len] == '\0');
-            return 4;
+    else {
+        if (n) {
+            if (s1[n - 1] == '\0') {
+                fprintf(stderr, "Has Term: %lu\n", len);
+                return 4;
+            }
         }
         if (s1[n] != '\0') {
             fprintf(stderr, "Missing appended null-term: %lu (%x)\n", len,
@@ -529,6 +530,134 @@ check_strncat(const uint8_t * s1_start,
 }
 
 
+static int32_t
+do_random_strncpy_tests4(uint64_t     test_size,
+                         void const * test_f,
+                         uint32_t     result_hi) {
+    func_switch_t func = { test_f };
+    size_t        i, j, n, align1, align2, len, size, mode;
+
+    char * buf1 = (char *)make_buf(test_size);
+    char * buf2 = (char *)make_buf(test_size);
+
+
+    wchar_t * p1 = (wchar_t *)(buf1 + test_size) - 512;
+    wchar_t * p2 = (wchar_t *)(buf2 + test_size) - 512;
+    wchar_t * res, *expec;
+
+
+    enum { ITERATIONS = 100000 };
+    seed_rand(0);
+    for (n = 0; n < ITERATIONS; n++) {
+        /* For wcsncpy: align1 and align2 here mean align not in bytes,
+           but in wchar_ts, in bytes it will equal to align * (sizeof
+           (wchar_t)).  */
+
+        mode = rand32();
+        if (mode & 1) {
+            size   = rand32() & 255;
+            align1 = 512 - size - (rand32() & 15);
+            if (mode & 2)
+                align2 = align1 - (rand32() & 24);
+            else
+                align2 = align1 - (rand32() & 31);
+            if (mode & 4) {
+                j      = align1;
+                align1 = align2;
+                align2 = j;
+            }
+            if (mode & 8)
+                len = size - (rand32() & 31);
+            else
+                len = 512;
+            if (len >= 512) len = rand32() & 511;
+        }
+        else {
+            align1 = rand32() & 31;
+            if (mode & 2)
+                align2 = rand32() & 31;
+            else
+                align2 = align1 + (rand32() & 24);
+            len = rand32() & 511;
+            j   = align1;
+            if (align2 > j) j = align2;
+            if (mode & 4) {
+                size = rand32() & 511;
+                if (size + j > 512) size = 512 - j - (rand32() & 31);
+            }
+            else
+                size = 512 - j;
+            if ((mode & 8) && len + j >= 512) len = 512 - j - (rand32() & 7);
+        }
+
+        j      = len + align1 + 64;
+        if (j > 512) j = 512;
+        for (i = 0; i < j; i++) {
+            if (i == len + align1)
+                p1[i] = 0;
+            else {
+                p1[i] = rand32() & 0xabcdabcd;
+                if (i >= align1 && i < len + align1 && !p1[i])
+                    p1[i] = (rand32() & 0xabcdabcd) + 3;
+            }
+        }
+
+        {
+            wmemset(p2 - 64, '\1', 512 + 64);
+            res = (wchar_t *)func.run_wcsncpy((wchar_t *)(p2 + align2),
+                                              (wchar_t *)(p1 + align1), size);
+            expec =
+                result_hi ? ((p2 + align2) + MIN(len, size)) : (p2 + align2);
+            if (res != expec) {
+                fprintf(
+                    stderr,
+                    "Iteration %zd - wrong result in function %s (%zd, %zd, %zd) %p != %p",
+                    n, "foo", align1, align2, len, res, expec);
+                return 1;
+            }
+            wchar_t tmp = '\1';
+            for (j = 0; j < align2 + 64; ++j) {
+                if (p2[j - 64] != '\1') {
+                    fprintf(
+                        stderr,
+                        "Iteration %zd - garbage before, %s (%zd, %zd, %zd) (%x != %x)",
+                        n, "foo", align1, align2, len, p2[j - 64], tmp);
+                    return 1;
+                }
+            }
+            j = align2 + len + 1;
+            if (size + align2 > j) j = size + align2;
+            for (; j < 512; ++j) {
+                if (p2[j] != '\1') {
+                    fprintf(
+                        stderr,
+                        "Iteration %zd - garbage after, %s (%zd, %zd, %zd) (%x != %x)",
+                        n, "foo", align1, align2, len, p2[j], '\1');
+                    return 1;
+                }
+            }
+            for (j = align2 + len + 1; j < align2 + size; ++j)
+                if (p2[j]) {
+                    fprintf(
+                        stderr,
+                        "Iteration %zd - garbage after size, %s (%zd, %zd, %zd)",
+                        n, "foo", align1, align2, len);
+                    return 1;
+                }
+            j = len + 1;
+            if (size < j) j = size;
+            if (wmemcmp(p1 + align1, p2 + align2, j)) {
+                fprintf(stderr,
+                        "Iteration %zd - different strings, %s (%zd, %zd, %zd, %zd)",
+                        n, "foo", align1, align2, len, size);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+
 static int
 do_strncat_random_tests(uint64_t test_size, void const * test_f) {
 
@@ -543,27 +672,28 @@ do_strncat_random_tests(uint64_t test_size, void const * test_f) {
     char * p2 = (char *)(buf2 + test_size) - 512;
     char * p3 = (char *)buf1;
     char * res;
-    enum { ITERATIONS = 100000 };
+    enum { ITERATIONS = 20000 };
+
 
     for (n = 0; n < ITERATIONS; n++) {
-        N      = rand() & 255;
-        align1 = rand() & 31;
-        if (rand() & 1)
-            align2 = rand() & 31;
+        N      = rand32() & 255;
+        align1 = rand32() & 31;
+        if (rand32() & 1)
+            align2 = rand32() & 31;
         else
-            align2 = align1 + (rand() & 24);
-        len1 = rand() & 511;
+            align2 = align1 + (rand32() & 24);
+        len1 = rand32() & 511;
         if (len1 + align2 > 512)
-            len2 = rand() & 7;
+            len2 = rand32() & 7;
         else
-            len2 = (512 - len1 - align2) * (rand() & (1024 * 1024 - 1)) /
+            len2 = (512 - len1 - align2) * (rand32() & (1024 * 1024 - 1)) /
                    (1024 * 1024);
         j = align1;
         if (align2 + len2 > j) j = align2 + len2;
-        if (len1 + j >= 511) len1 = 510 - j - (rand() & 7);
+        if (len1 + j >= 511) len1 = 510 - j - (rand32() & 7);
         if (len1 >= 512) len1 = 0;
         if (align1 + len1 < 512 - 8) {
-            j = 510 - align1 - len1 - (rand() & 31);
+            j = 510 - align1 - len1 - (rand32() & 31);
             if (j > 0 && j < 512) align1 += j;
         }
         j = len1 + align1 + 64;
@@ -572,14 +702,14 @@ do_strncat_random_tests(uint64_t test_size, void const * test_f) {
             if (i == len1 + align1)
                 p1[i] = 0;
             else {
-                p1[i] = rand() & 254;
+                p1[i] = rand32() & 254;
                 if (i >= align1 && i < len1 + align1 && !p1[i])
-                    p1[i] = (rand() & 123) + 3;
+                    p1[i] = (rand32() & 123) + 3;
             }
         }
         for (i = 0; i < len2; i++) {
-            p3[i] = rand() & 254;
-            if (!p3[i]) p3[i] = (rand() & 123) + 3;
+            p3[i] = rand32() & 254;
+            if (!p3[i]) p3[i] = (rand32() & 123) + 3;
         }
         p3[len2] = 0;
 
@@ -817,8 +947,9 @@ typedef FUNC_T(init_strcpy) init_func_t;
 typedef FUNC_T(check_strcpy) check_func_t;
 
 #define FAILURE_MSG                                                            \
-    "al1=%lu, al2=%lu, i=%lu, j=%lu, k=%lu, n=%lu\n",                          \
-        ((uint64_t)test1) % 4096, ((uint64_t)test2) % 4096, i, j, k, n
+    "al1=%lu, al2=%lu, i=%lu(%lu), j=%lu, k=%lu, n=%lu\n",                     \
+        ((uint64_t)test1) % 4096, ((uint64_t)test2) % 4096, i, al_offset, j,   \
+        k, n
 #define INIT_I 0
 #define INIT_J 0
 #define INIT_K 0
@@ -910,7 +1041,7 @@ next_length(uint64_t l, uint64_t test_size, uint64_t wsize_shift) {
         return l += (1 << wsize_shift);
     }
 
-    return l += (((rand() % base) | 1) << wsize_shift);
+    return l += (((rand32() % base) | 1) << wsize_shift);
 }
 static int32_t
 test_strncpy_kernel(char const * name,
@@ -1052,8 +1183,8 @@ test_strncpy(void const * test_f) {
 }
 int32_t
 test_strncat(void const * test_f) {
-//    test_assert(do_strncat_random_tests(4096, test_f) == 0);
-//    test_assert(do_strncat_random_tests(8192, test_f) == 0);
+    test_assert(do_strncat_random_tests(4096, test_f) == 0);
+    test_assert(do_strncat_random_tests(8192, test_f) == 0);
     test_assert(test_strncpy_kernel("test_strncat", 4096, test_f,
                                     &check_strncat, &init_strncat, 1) == 0);
     test_assert(test_strncpy_kernel("test_strncat", 8192, test_f,
@@ -1124,6 +1255,8 @@ test_wcsncat(void const * test_f) {
 }
 int32_t
 test_wcpncpy(void const * test_f) {
+    test_assert(do_random_strncpy_tests4(4096, test_f, 1) == 0);
+    test_assert(do_random_strncpy_tests4(8192, test_f, 1) == 0);
     test_assert(test_strncpy_kernel("test_wcpncpy", 4096, test_f,
                                     &check_stpncpy, &init_strncpy, 4) == 0);
     test_assert(test_strncpy_kernel("test_wcpncpy", 8192, test_f,

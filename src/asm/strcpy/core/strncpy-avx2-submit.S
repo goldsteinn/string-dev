@@ -24,7 +24,7 @@
 
 
 # ifndef VEC_SIZE
-#  include "x86-avx2-vecs.h"
+#  include "x86-avx-vecs.h"
 # endif
 
 # ifndef STRNCPY

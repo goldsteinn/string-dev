@@ -23,7 +23,7 @@
 # include <sysdep.h>
 
 # ifndef VEC_SIZE
-#  include "x86-avx2-vecs.h"
+#  include "x86-avx-vecs.h"
 # endif
 
 # ifndef STRCPY
@@ -66,7 +66,7 @@ ENTRY(STRCPY)
 
 # ifdef USE_AS_STRCAT
 	movq	%rdi, %rax
-#  include "strcat-strlen-avx2.S"
+#  include "strcat-strlen-avx2.h.S"
 # endif
 
 	movl	%esi, %PAGE_ALIGN_REG
@@ -147,36 +147,6 @@ L(copy_8_15):
 	movq	%rcx, -(8 - CHAR_SIZE)(%END_REG)
 	ret
 
-	.p2align 4,, 8
-L(ret_vec_x1):
-	bsfl	%ecx, %ecx
-	VMOVU	(1 -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %VMM(1)
-	VMOVU	%VMM(1), (1 -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
-# ifdef USE_AS_STPCPY
-	leaq	1(%rcx, %rdi), %rax
-# endif
-L(return_vzeroupper):
-	ZERO_UPPER_VEC_REGISTERS_RETURN
-
-	.p2align 4,, 8
-L(ret_vec_x2):
-	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %VMM(1)
-	VMOVU	%VMM(1), ((VEC_SIZE + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
-# ifdef USE_AS_STPCPY
-	leaq	(VEC_SIZE * 1 + 1)(%rcx, %rdi), %rax
-# endif
-	VZEROUPPER_RETURN
-
-	.p2align 4,, 8
-L(ret_vec_x3):
-	bsfl	%ecx, %ecx
-	VMOVU	((VEC_SIZE * 2 + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %VMM(1)
-	VMOVU	%VMM(1), ((VEC_SIZE * 2 + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
-# ifdef USE_AS_STPCPY
-	leaq	(VEC_SIZE * 2 + 1)(%rcx, %rdi), %rax
-# endif
-	VZEROUPPER_RETURN
 
 	.p2align 4,, 8
 L(more_1x_vec):
@@ -298,6 +268,38 @@ L(ret_vec_x4):
 # endif
 L(return_end):
 	VZEROUPPER_RETURN
+
+	.p2align 4,, 8
+L(ret_vec_x1):
+	bsfl	%ecx, %ecx
+	VMOVU	(1 -(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %VMM(1)
+	VMOVU	%VMM(1), (1 -(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
+# ifdef USE_AS_STPCPY
+	leaq	1(%rcx, %rdi), %rax
+# endif
+L(return_vzeroupper):
+	ZERO_UPPER_VEC_REGISTERS_RETURN
+
+	.p2align 4,, 8
+L(ret_vec_x2):
+	bsfl	%ecx, %ecx
+	VMOVU	((VEC_SIZE + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %VMM(1)
+	VMOVU	%VMM(1), ((VEC_SIZE + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
+# ifdef USE_AS_STPCPY
+	leaq	(VEC_SIZE * 1 + 1)(%rcx, %rdi), %rax
+# endif
+	VZEROUPPER_RETURN
+
+	.p2align 4,, 8
+L(ret_vec_x3):
+	bsfl	%ecx, %ecx
+	VMOVU	((VEC_SIZE * 2 + 1)-(VEC_SIZE - CHAR_SIZE))(%rsi, %rcx), %VMM(1)
+	VMOVU	%VMM(1), ((VEC_SIZE * 2 + 1)-(VEC_SIZE - CHAR_SIZE))(%rdi, %rcx)
+# ifdef USE_AS_STPCPY
+	leaq	(VEC_SIZE * 2 + 1)(%rcx, %rdi), %rax
+# endif
+	VZEROUPPER_RETURN
+
 
 	.p2align 4,, 4
 L(page_cross):

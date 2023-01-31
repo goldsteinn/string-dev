@@ -54,8 +54,10 @@ def get_stat(times):
     tmp = copy.deepcopy(times)
     tmp.sort()
 
-    return statistics.geometric_mean(tmp[0:20])
-    #return min(times)#statistics.median(times)
+    return statistics.geometric_mean(tmp)
+
+
+#    return max(times)#statistics.median(times)
 
 
 def csv_add(s, field):
@@ -271,13 +273,14 @@ class JsonFile():
 
     def csv_hdr(self, other, impls, kclass):
         out = self.out_fields(kclass)
-        out = add_offset(out)
+        #        out = add_offset(out)
         for i in range(0, len(impls)):
             out = csv_add(out, self.csv_name())
             if other is not None:
                 out = csv_add(out, other.csv_name())
-                out = csv_add(out, "{}/{}".format(self.csv_name(), other.csv_name()))
-            if i != len(impls) - 1:
+                out = csv_add(
+                    out, "{}/{}".format(self.csv_name(), other.csv_name()))
+            if i != len(impls) - 1 and False:
                 out += ","
 
         return out
@@ -295,23 +298,24 @@ class JsonFile():
         impl_pieces = impl.split("-")
         postfix = "_unaligned"
         prefix = "__"
-        if "str" in self.get_bench_func() or "wcs" in self.get_bench_func(
-        ) or ("mem" in self.get_bench_func()
-              and "chr" in self.get_bench_func()):
+        bf = self.get_bench_func()
+        if bf.endswith("-lat"):
+            assert bf.count("-lat") == 1
+            bf = bf.replace("-lat", "")
+        if "str" in bf or "wcs" in self.get_bench_func() or (
+                "mem" in bf and "chr" in bf) or "stp" in bf:
             postfix = ""
-        elif self.get_bench_func() == "memcmp" or self.get_bench_func(
-        ) == "bcmp" or self.get_bench_func() == "__memcmpeq":
-            if self.get_bench_func() == "memcmp" and (impl == "avx2"
-                                                      or impl == "evex"):
+        elif bf == "memcmp" or self.get_bench_func(
+        ) == "bcmp" or bf == "__memcmpeq":
+            if bf == "memcmp" and (impl == "avx2" or impl == "evex"):
                 postfix = "_movbe"
             else:
                 postfix = ""
 
-        if self.get_bench_func()[0:2] == "__":
+        if bf[0:2] == "__":
 
             prefix = ""
-        out = "{}{}_{}{}".format(prefix, self.get_bench_func(), impl_pieces[0],
-                                 postfix)
+        out = "{}{}_{}{}".format(prefix, bf, impl_pieces[0], postfix)
         if len(impl_pieces) > 1:
             out += "_" + impl_pieces[1]
         return out
@@ -319,7 +323,9 @@ class JsonFile():
     def load_file(self, fname):
         if os.access(fname, os.R_OK) is False:
             return None
-        print(fname)
+
+
+#        print(fname)
         with open(fname) as json_file:
             return json.load(json_file)
 
@@ -458,9 +464,12 @@ class JsonFile():
             self.get_results(json_obj)
 
     def show_results(self, impls, others, cmp_s):
+
         if len(others) == 0:
+
             self.show_results_cmp_impls(impls)
         elif len(others) == 1:
+
             self.show_results_cmp_other(impls, others[0])
         else:
             if cmp_s is None or cmp_s == "":
@@ -489,7 +498,7 @@ class JsonFile():
             print(self.out_fields(kclass), end=",")
             first = True
             ifunc_hdr = []
-            for key in sorted(self.key_order):
+            for key in self.key_order:
                 res = self.all_results[key]
                 if res.kclass != kclass:
                     continue
@@ -592,13 +601,10 @@ class JsonFile():
             for disp in disps:
                 print(disp.out(), end="")
 
-
 all_json_files = []
 for i in range(0, len(version_dirs)):
-
     all_json_files.append([])
     for cmp_file in cmp_files:
-
         res = JsonFile(version_dirs[i] + cmp_file)
         res.parse_all_files()
         all_json_files[i].append(res)
@@ -607,7 +613,6 @@ if len(version_dirs) == 1:
     for res in all_json_files[0]:
         res.show_results_cmp_impls(cmp_impls)
 else:
-
     for cmp_impl in cmp_impls:
         for i in range(0, len(all_json_files[0])):
             jsons_to_cmp = []
