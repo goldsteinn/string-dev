@@ -6,11 +6,11 @@
 #elif defined USE_AS_AVX
 #include "libc-defs/libc-avx-vecs.h"
 #elif defined USE_AS_AVX2
-#include "libc-defs/libc-avx2-vecs.h"
+#include "libc-defs/libc-avx-vecs.h"
 #elif defined USE_AS_EVEX
-#include "libc-defs/libc-evex-vecs.h"
+#include "libc-defs/libc-evex256-vecs.h"
 #elif defined USE_AS_AVX512
-#include "libc-defs/libc-avx512-vecs.h"
+#include "libc-defs/libc-evex512-vecs.h"
 #endif
 
 #define USE_MULTIARCH

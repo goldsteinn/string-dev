@@ -41,7 +41,8 @@
 
 #define STRRCHR_IMPLS expand_impls(strrchr, evex512, evex)
 #define WCSRCHR_IMPLS expand_impls(wcsrchr, evex512, evex, avx2, sse2)
-#define MEMCPY_IMPLS  expand_impls(memcpy, ssse3),  memcpy_avx2_folly, memcpy_avx2_dev
+#define MEMCPY_IMPLS                                                           \
+    expand_impls(memcpy, ssse3), memcpy_avx2_folly, memcpy_avx2_dev
 #define MEMCMP_IMPLS                                                           \
     expand_impls(memcmp, ssse3, sse2, sse4, avx2, evex), memcmp_evex512_dev
 #define WMEMCMP_IMPLS                                                          \
@@ -73,15 +74,22 @@
 #define WCSNCPY_IMPLS                                                          \
     expand_impls(wcsncpy, sse2, avx2, evex), wcsncpy_evex512_dev
 #define WCSNCAT_IMPLS                                                          \
-    expand_impls(wcsncat, sse2, avx2, evex), wcsncat_evex512_dev
+    wcsncat_evex512_dev  // expand_impls(wcsncat, sse2, avx2, evex),
+                         // wcsncat_evex512_dev
+
 #define WCPNCPY_IMPLS                                                          \
-    expand_impls(wcpncpy, sse2, avx2, evex), wcpncpy_evex512_dev
+    wcpncpy_evex512_dev  // expand_impls(wcpncpy, sse2, avx2, evex),
+                         // wcpncpy_evex512_dev
 
 #define STRCHR_IMPLS    expand_impls(strchr, sse2, avx2, evex, evex512)
 #define STRCHRNUL_IMPLS expand_impls(strchrnul, sse2, avx2, evex, evex512)
 #define WCSCHR_IMPLS    expand_impls(wcschr, sse2, avx2, evex, evex512)
 
-#define MEMSET_IMPLS memset_sse2_glibc, memset_sse2_erms_glibc, memset_avx2_folly, memset_avx2_dev
+#define MEMSET_IMPLS                                                           \
+    memset_sse2_erms_dev, memset_avx2_erms_dev, memset_avx512_erms_dev,        \
+        memset_evex_erms_dev, memset_sse2_erms_glibc, memset_avx2_erms_glibc,  \
+        memset_avx512_erms_glibc, memset_evex_erms_glibc
+
 
 #define STRCMP_IMPLS                                                           \
     expand_impls(strcmp, sse2, sse2_unaligned, sse42, avx2, evex),             \

@@ -62,7 +62,7 @@ ENTRY(STRNCAT)
 	salq	$2, %rdx
 # else
 	test	%rdx, %rdx
-	jl	L(zero_len)
+	jle	L(zero_len)
 # endif
 	vpxor	%VZERO_128, %VZERO_128, %VZERO_128
 

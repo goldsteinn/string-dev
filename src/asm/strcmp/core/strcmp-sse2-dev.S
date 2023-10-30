@@ -18,8 +18,8 @@
 
 
 	// #define USE_AS_STRNLEN
-#include "../../libc-asm-common.h"
-
+//#include "../../libc-asm-common.h"
+#include "/home/noah/programs/projects/string-dev/src/asm/libc-asm-common.h"
 /* Continue building at ISA level 2 as the strcmp-sse42 is not always
    preferable for ISA level == 2 CPUs.  */
 #if ISA_SHOULD_BUILD (2)

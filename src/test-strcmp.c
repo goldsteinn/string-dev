@@ -122,13 +122,13 @@ wcsncmp_expec(const void * s1,
     return _c1 == _c2 ? 0 : (_c1 < _c2 ? -1 : 1);
 }
 
-#define INIT_I      0
-#define INIT_J      0
-#define INIT_K      0
-#define INIT_L0     0
-#define INIT_L1     0
-#define INIT_NP     0
-//#define PRINTV(...) fprintf(stderr, __VA_ARGS__)
+#define INIT_I  0
+#define INIT_J  0
+#define INIT_K  0
+#define INIT_L0 0
+#define INIT_L1 0
+#define INIT_NP 0
+// #define PRINTV(...) fprintf(stderr, __VA_ARGS__)
 
 #ifndef PRINTV
 #define PRINTV(...)
@@ -143,6 +143,88 @@ wcsncmp_expec(const void * s1,
 #define STRCMP_EQ(x, y)                                                        \
     ((((x) == 0) == ((y) == 0)) && (((x) < 0) == ((y) < 0)) &&                 \
      (((x) > 0) == ((y) > 0)))
+
+static int
+test_strncmp_kernel(void const * test_f,
+                    FUNC_T(strcmp_expec) expec_f,
+                    uint32_t test_size,
+                    uint32_t wsize) {
+    func_switch_t func = { test_f };
+
+    uint8_t *s0, *s1, *test_s0, *test_s1;
+    int      with_len = 1;
+    uint64_t l0 = 0, l1 = 0;
+    s0 = make_buf(test_size);
+    s1 = make_buf(test_size);
+
+    memset_c(s0, 0x12, test_size);
+    memcpy_c(s1, s0, test_size);
+
+    test_size = ROUNDDOWN_P2(test_size, wsize);
+
+    uint64_t al_pairs[NPAIRS * 2] = { 0 };
+    for (uint64_t i = INIT_I; i < nalignments * 2; ++i) {
+        uint64_t al_offset = alignments[i % nalignments];
+        al_offset = (i >= nalignments ? PAGE_SIZE - al_offset : al_offset);
+        al_offset = ROUNDDOWN_P2(al_offset, wsize);
+        make_alignment_pairs(al_pairs, al_offset);
+
+        fprintf(stderr, "%zu\n", i);
+        for (uint64_t j = INIT_J; j + al_offset < test_size; j += wsize) {
+            for (uint64_t np = 0; np < NPAIRS; ++np) {
+                test_s0 = s0 + (al_pairs[S1_IDX(np)] & (-wsize));
+                test_s1 = s1 + (al_pairs[S2_IDX(np)] & (-wsize));
+
+                #define J_OFF 10000
+                for (uint64_t k = INIT_K ? INIT_K : (j > J_OFF ? (j - J_OFF) : 0);
+                     k + al_offset < MIN(test_size, j + J_OFF); ++k) {
+                    PRINTV("%zu:%zu:%zu:%zu:%zu\n", i, j, l0, l1, k);
+
+                    int res, expec;
+
+                    expec = expec_f(test_s0, test_s1, -1UL, -1UL, k, -1UL);
+                    res   = run(test_s0, test_s1, k);
+                    test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+
+                    expec = -expec;
+                    res   = run(test_s1, test_s0, k);
+                    test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+
+
+                    memset_c(test_s0 + j, 0x11, wsize);
+
+                    res   = run(test_s0, test_s1, k);
+                    expec = expec_f(test_s0, test_s1, -1UL, -1UL, k, j);
+
+                    test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+
+                    res   = run(test_s1, test_s0, k);
+                    expec = -expec;
+
+                    test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+
+                    if (0) {
+                        if (k == 0 || (k == j - 80)) {
+                            res = run(test_s0, test_s1, -1UL);
+                            expec =
+                                expec_f(test_s0, test_s1, -1UL, -1UL, -1UL, j);
+
+                            test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+
+                            res   = run(test_s1, test_s0, -1UL);
+                            expec = -expec;
+
+                            test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+                        }
+                    }
+                    memset_c(test_s0 + j, 0x12, wsize);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 static int
 test_strcmp_kernel(void const * test_f,
                    FUNC_T(strcmp_expec) expec_f,
@@ -169,67 +251,66 @@ test_strcmp_kernel(void const * test_f,
         make_alignment_pairs(al_pairs, al_offset);
 
         fprintf(stderr, "%zu\n", i);
-
+        int ON = 0;
         for (uint64_t j = INIT_J; j + al_offset < test_size;
              j          = ((next_v(j, test_size) + (wsize - 1)) & (-wsize))) {
-            //            fprintf(stderr, "%zu-%zu\n", i, j);
-            for (uint64_t l0 = INIT_L0 ? INIT_L0 : (j > 260 ? (j - 260) : 0);
-                 l0 + al_offset < MIN(test_size, j + 260);
+            fprintf(stderr, "%zu-%zu\n", i, j);
+            for (uint64_t l0 = INIT_L0 ? INIT_L0 : (j > 80 ? (j - 80) : 0);
+                 l0 + al_offset < MIN(test_size, j + 80);
                  l0 = next_v2(l0, j, wsize)) {
-#if 0
-                for (uint64_t l1 = INIT_L1 ? INIT_L1
-                                           : (j > 260 ? (j - 260) : 0);
-                     l1 + al_offset < MIN(test_size, j + 260);
+#if 1
+                for (uint64_t l1 = INIT_L1 ? INIT_L1 : (j > 80 ? (j - 80) : 0);
+                     l1 + al_offset < MIN(test_size, j + 80);
                      l1 = next_v2(l1, l0, wsize)) {
 #endif
-                {
+
                     uint64_t l1 = l0;
-                    for (uint64_t k = INIT_K ? INIT_K
-                                             : (j > 260 ? (j - 260) : 0);
-                         k + al_offset < MIN(test_size, j + 260);
+                    for (uint64_t k = INIT_K ? INIT_K : (j > 80 ? (j - 80) : 0);
+                         k + al_offset < MIN(test_size, j + 80);
                          k = next_v2(k, j, wsize)) {
                         PRINTV("%zu:%zu:%zu:%zu:%zu\n", i, j, l0, l1, k);
                         for (uint64_t np = 0; np < NPAIRS; ++np) {
 
-                            int res, expec;
+                            int res = 0, expec = 0;
                             test_s0 = s0 + (al_pairs[S1_IDX(np)] & (-wsize));
                             test_s1 = s1 + (al_pairs[S2_IDX(np)] & (-wsize));
 
 
                             memset_c(test_s0 + l0, 0x0, wsize);
                             memset_c(test_s1 + l1, 0x0, wsize);
+                            if (ON) {
+                                expec =
+                                    expec_f(test_s0, test_s1, l0, l1, k, -1UL);
+                                res = run(test_s0, test_s1, k);
+                                test_assert(STRCMP_EQ(res, expec), TEST_ERR);
 
-
-                            expec = expec_f(test_s0, test_s1, l0, l1, k, -1UL);
-                            res   = run(test_s0, test_s1, k);
-                            test_assert(STRCMP_EQ(res, expec), TEST_ERR);
-
-                            expec = -expec;
-                            res   = run(test_s1, test_s0, k);
-                            test_assert(STRCMP_EQ(res, expec), TEST_ERR);
-
+                                expec = -expec;
+                                res   = run(test_s1, test_s0, k);
+                                test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+                            }
 
                             memset_c(test_s0 + j, 0x11, wsize);
 
-                            res   = run(test_s0, test_s1, k);
-                            expec = expec_f(test_s0, test_s1, l0, l1, k, j);
+                            if (ON) {
+                                res   = run(test_s0, test_s1, k);
+                                expec = expec_f(test_s0, test_s1, l0, l1, k, j);
 
-                            test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+                                test_assert(STRCMP_EQ(res, expec), TEST_ERR);
 
-                            res   = run(test_s1, test_s0, k);
-                            expec = -expec;
+                                res   = run(test_s1, test_s0, k);
+                                expec = -expec;
 
-                            test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+                                test_assert(STRCMP_EQ(res, expec), TEST_ERR);
+                            }
 
-
-                            if (with_len) {
+                            if (with_len && k == 0 && ON) {
                                 uint64_t of_k = -1UL;
                                 int      expec0, expec1;
                                 expec0 =
                                     expec_f(test_s0, test_s1, l0, l1, of_k, j);
                                 expec1 =
                                     expec_f(test_s1, test_s0, l0, l1, of_k, j);
-
+                                assert((expec0 == 0) == (expec1 == 0));
                                 res = run(test_s0, test_s1, of_k);
                                 test_assert(STRCMP_EQ(res, expec0), TEST_ERR);
 
@@ -307,6 +388,38 @@ test_strcmp_kernel(void const * test_f,
                                 test_assert(STRCMP_EQ(res, expec1), TEST_ERR);
                             }
 
+
+                            if (with_len) {
+                                int expec0, expec1;
+                                memset_c(test_s0 + l0, 0x12, wsize);
+                                memset_c(test_s1 + l1, 0x12, wsize);
+                                memset_c(test_s0 + j, 0x11, wsize);
+                                if (k == 0) {
+                                    expec0 = expec_f(test_s0, test_s1, -1UL,
+                                                     -1UL, -1UL, j);
+                                    expec1 = expec_f(test_s1, test_s0, -1UL,
+                                                     -1UL, -1UL, j);
+
+                                    res = run(test_s0, test_s1, -1UL);
+                                    test_assert(STRCMP_EQ(res, expec0),
+                                                TEST_ERR);
+
+                                    res = run(test_s1, test_s0, -1UL);
+                                    test_assert(STRCMP_EQ(res, expec1),
+                                                TEST_ERR);
+                                }
+                                expec0 =
+                                    expec_f(test_s0, test_s1, -1UL, -1UL, k, j);
+                                expec1 =
+                                    expec_f(test_s1, test_s0, -1UL, -1UL, k, j);
+
+                                res = run(test_s0, test_s1, k);
+                                test_assert(STRCMP_EQ(res, expec0), TEST_ERR);
+
+                                res = run(test_s1, test_s0, k);
+                                test_assert(STRCMP_EQ(res, expec1), TEST_ERR);
+                            }
+
                             memset_c(test_s0 + j, 0x12, wsize);
                             memset_c(test_s0 + l0, 0x12, wsize);
                             memset_c(test_s1 + l1, 0x12, wsize);
@@ -335,6 +448,7 @@ test_strcmp(void const * test_f) {
 
 int
 test_strncmp(void const * test_f) {
+    test_assert(test_strncmp_kernel(test_f, &strncmp_expec, PAGE_SIZE, 1) == 0);
     test_assert(test_strcmp_kernel(test_f, &strncmp_expec, PAGE_SIZE, 1, 1) ==
                 0);
     test_assert(

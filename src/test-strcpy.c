@@ -590,7 +590,7 @@ do_random_strncpy_tests4(uint64_t     test_size,
             if ((mode & 8) && len + j >= 512) len = 512 - j - (rand32() & 7);
         }
 
-        j      = len + align1 + 64;
+        j = len + align1 + 64;
         if (j > 512) j = 512;
         for (i = 0; i < j; i++) {
             if (i == len + align1)
@@ -647,9 +647,10 @@ do_random_strncpy_tests4(uint64_t     test_size,
             j = len + 1;
             if (size < j) j = size;
             if (wmemcmp(p1 + align1, p2 + align2, j)) {
-                fprintf(stderr,
-                        "Iteration %zd - different strings, %s (%zd, %zd, %zd, %zd)",
-                        n, "foo", align1, align2, len, size);
+                fprintf(
+                    stderr,
+                    "Iteration %zd - different strings, %s (%zd, %zd, %zd, %zd)",
+                    n, "foo", align1, align2, len, size);
                 return 1;
             }
         }
@@ -1181,8 +1182,11 @@ test_strncpy(void const * test_f) {
 
     return 0;
 }
+
+#include "test-strncat-extra.h"
 int32_t
 test_strncat(void const * test_f) {
+    test_assert(strncat_extra_check(test_f) == 0);
     test_assert(do_strncat_random_tests(4096, test_f) == 0);
     test_assert(do_strncat_random_tests(8192, test_f) == 0);
     test_assert(test_strncpy_kernel("test_strncat", 4096, test_f,
@@ -1245,8 +1249,11 @@ test_wcsncpy(void const * test_f) {
                                     &check_strncpy, &init_strncpy, 4) == 0);
     return 0;
 }
+
+#include "test-wcsncat-extra.h"
 int32_t
 test_wcsncat(void const * test_f) {
+    test_assert(wcsncat_extra_check(test_f) == 0);
     test_assert(test_strncpy_kernel("test_wcsncat", 4096, test_f,
                                     &check_wcsncat, &init_wcsncat, 4) == 0);
     test_assert(test_strncpy_kernel("test_wcsncat", 8192, test_f,

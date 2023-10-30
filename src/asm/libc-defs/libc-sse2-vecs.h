@@ -25,7 +25,7 @@
 #endif
 
 #define VEC_SIZE			16
-#include "x86-vec-macros.h"
+#include "libc-vec-macros.h"
 
 #define USE_WITH_SSE2		1
 #define SECTION(p)			p

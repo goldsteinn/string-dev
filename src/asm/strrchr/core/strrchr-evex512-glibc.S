@@ -1,5 +1,5 @@
 /* Placeholder function, not used by any processor at the moment.
-   Copyright (C) 2022 Free Software Foundation, Inc.
+   Copyright (C) 2022-2023 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -22,9 +22,10 @@
 
 #if ISA_SHOULD_BUILD (4)
 
-# include <sysdep.h>
+# include "x86-evex512-vecs.h"
+# include "reg-macros.h"
 
-#include "x86-evex512-vecs.h"
+# include <sysdep.h>
 
 # ifdef USE_AS_WCSRCHR
 #  define CHAR_SIZE	4
@@ -32,7 +33,6 @@
 #  define VPCMPEQ	vpcmpeqd
 #  define VPMINU	vpminud
 #  define VPTESTN	vptestnmd
-#  define USE_WIDE_CHAR
 # else
 #  define CHAR_SIZE	1
 #  define VPBROADCAST	vpbroadcastb
@@ -41,14 +41,12 @@
 #  define VPTESTN	vptestnmb
 # endif
 
-# include "reg-macros.h"
-
 # define PAGE_SIZE	4096
 # define CHAR_PER_VEC	(VEC_SIZE / CHAR_SIZE)
 
 	.section SECTION(.text), "ax", @progbits
-	/* Aligning entry point to 64 byte, provides better performance
-	   for one vector length string.  */
+	/* Aligning entry point to 64 byte, provides better performance for
+	   one vector length string.  */
 ENTRY_P2ALIGN(STRRCHR, 6)
 
 	/* Broadcast CHAR to VMM(0).  */
@@ -115,14 +113,15 @@ L(align_more):
 	movq	%rdi, %rsi
 	/* Align pointer to vector size.  */
 	andq	$-VEC_SIZE, %rdi
-	/* Loop unroll 2 times for 2 vector loop.  */
+	/* Loop unroll for 2 vector loop.  */
 	VMOVA	(VEC_SIZE)(%rdi), %VMM(2)
 	VPTESTN	%VMM(2), %VMM(2), %k0
 	KMOV	%k0, %VRCX
 	test	%VRCX, %VRCX
 	jnz	L(vector_x2_end)
 
-	/* Save pointer of second vector, in case if no match found.  */
+	/* Save pointer of second vector, in case if no match
+	   found.  */
 	movq	%rdi, %r9
 	/* Align address to VEC_SIZE * 2 for loop.  */
 	andq	$-(VEC_SIZE * 2), %rdi
@@ -156,12 +155,12 @@ L(loop):
 	jnz	L(loop_vec_x2_match)
 
 	KMOV	%k1, %VRDX
-	/* Match is in first vector, rdi offset need to be substracted
+	/* Match is in first vector, rdi offset need to be subtracted
 	   by VEC_SIZE.  */
 	sub	$VEC_SIZE, %r8
 
-	/* If second vector doesn't have match, first vector must have
-	   match.  */
+	/* If second vector doesn't have match, first vector must
+	   have match.  */
 L(loop_vec_x2_match):
 	BSR	%VRDX, %VRDX
 # ifdef USE_AS_WCSRCHR
@@ -219,8 +218,8 @@ L(check_last_match):
 	movq	%r8, %rax
 	ret
 
-	/* No match recorded in r8. Check the second saved vector in
-	   begining.  */
+	/* No match recorded in r8. Check the second saved vector
+	   in beginning.  */
 L(vector_x2_ret):
 	VPCMPEQ	%VMM(2), %VMM(0), %k2
 	KMOV	%k2, %VRAX
@@ -242,8 +241,8 @@ L(page_cross):
 	andl	$(VEC_SIZE - 1), %ecx
 	sarl	$2, %ecx
 # endif
-	/* ecx contains number of w[char] to be skipped as a result of
-	   address alignment.  */
+	/* ecx contains number of w[char] to be skipped as a result
+	   of address alignment.  */
 	andq	$-VEC_SIZE, %rax
 	VMOVA	(%rax), %VMM(1)
 	VPTESTN	%VMM(1), %VMM(1), %k1

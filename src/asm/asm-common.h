@@ -1,6 +1,8 @@
 #ifndef _SRC__ASM__ASM_COMMON_H_
 #define _SRC__ASM__ASM_COMMON_H_
 
+#define CCAT_PRIM(x, y)  x##y
+#define CCAT(x, y)       CCAT_PRIM(x, y)
 #define _L(name)         L##name
 #define L(name)          _L(name)
 #define NAME_LABEL(name) name##:
@@ -25,7 +27,7 @@
 
 #define ALIGNARG(log2) (1 << (log2))
 #define ENTRY_P2ALIGN(name, alignment)                                         \
-    .align ALIGNARG(12);                                                \
+    .align ALIGNARG(alignment);                                                \
     ENTRY_END(name)
 
 #define PAGE_ALIGN_CODE .align 4096;
@@ -35,7 +37,7 @@
 #endif
 
 #if ALIGN_ENTRY == 0
-#define ENTRY(name) ENTRY_P2ALIGN(name, 12)
+#define ENTRY(name) ENTRY_P2ALIGN(name, 4)
 
 #elif ALIGN_ENTRY == 48
 #define ENTRY_P2ALIGN(name)                                                    \
